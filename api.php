@@ -205,14 +205,19 @@ function handleAnalyzeImage($conn)
         echo json_encode(["success" => false, "message" => "Błąd konfiguracji serwera (brak klucza API)"]);
         return;
     }
-    $systemPrompt = "Jesteś ekspertem od fotografii produktowej i standardów Allegro. Twoim zadaniem jest ocena miniatury produktu (głównego zdjęcia).";
+    $systemPrompt = "Jesteś ekspertem od fotografii produktowej i standardów Allegro. Oceń miniatury produktu (główne zdjęcie). WAŻNE ZASADY:\n" .
+        "- CUDZE LOGOTYPY (logos): tylko loga INNYCH firm niż marka produktu. Logo MARKI PRODUKTU na produkcie (np. CUBOT na smartfonie CUBOT, Samsung na telefonie Samsung) = DOZWOLONE – ustaw logos.detected = false i details = \"Logo marki produktu – dozwolone\".\n" .
+        "- Nazwa modelu/parametry produktu na grafice (np. \"Pancerny 4,7\", \"16GB+128GB\", \"Android 15\") = DOZWOLONE (promotionalText.detected = false).\n" .
+        "- NIEDOZWOLONE teksty promocyjne: \"-10%\", \"-50%\", \"PROMOCJA\", \"NOWOŚĆ\", \"BESTSELLER\", \"GRATIS\", \"TANIEJ\" (promotionalText.detected = true).\n" .
+        "- Akcesoria w zestawie (słuchawki, ładowarka) = DOZWOLONE (extraElements.detected = false jeśli to część zestawu).\n" .
+        "- Ręka trzymająca produkt = DOZWOLONE.";
     $userPrompt = "Oceń to zdjęcie pod kątem standardów miniatury Allegro:\n" .
-        "1. Czy tło jest idealnie białe (RGB 255,255,255)?\n" .
+        "1. Czy tło jest w większości białe?\n" .
         "2. Czy produkt zajmuje odpowiednią część kadru?\n" .
-        "3. Czy na zdjęciu są niedozwolone elementy (teksty, logotypy, znaki wodne, ramki)?\n" .
-        "4. Oceń jakość/ostrość w skali 0-100%.\n" .
-        "5. Podaj krótkie podsumowanie i rekomendację.\n\n" .
-        "Zwróć odpowiedź w formacie JSON:\n" .
+        "3. DOZWOLONE: logo marki produktu, nazwa modelu, parametry techniczne (RAM/ROM/przekątna), akcesoria w zestawie.\n" .
+        "4. NIEDOZWOLONE: znaki wodne, teksty promocyjne (-50%, PROMOCJA, TANIEJ, NOWOŚĆ), cudze loga (nie producenta).\n" .
+        "5. WYMAGANE: Oceń ostrość zdjęcia (visualQuality.sharpness: score 0-100 i assessment) oraz profesjonalność tła (visualQuality.background: score 0-100 i assessment). Zawsze wypełnij te pola.\n\n" .
+        "Zwróć odpowiedź TYLKO w formacie JSON (wszystkie pola obowiązkowe, w tym visualQuality.sharpness i visualQuality.background):\n" .
         "{\n" .
         "  \"overallAIScore\": 90,\n" .
         "  \"summary\": \"Krótkie podsumowanie...\",\n" .
@@ -223,6 +228,10 @@ function handleAnalyzeImage($conn)
         "    \"extraElements\": { \"detected\": false, \"details\": \"...\" },\n" .
         "    \"colorVariants\": { \"detected\": false, \"details\": \"...\" },\n" .
         "    \"inappropriateContent\": { \"detected\": false, \"details\": \"...\" }\n" .
+        "  },\n" .
+        "  \"visualQuality\": {\n" .
+        "    \"sharpness\": { \"score\": 85, \"assessment\": \"Zdjęcie jest ostre...\" },\n" .
+        "    \"background\": { \"score\": 80, \"assessment\": \"Tło białe...\" }\n" .
         "  }\n" .
         "}";
     $payload = [
