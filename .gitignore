@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Archiwa
+*.zip
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logi i cache
+*.log
+.cache/
+
+# Zmienne środowiskowe (jeśli kiedyś dodasz)
+.env
+.env.local
+.env.*.local
