@@ -1175,7 +1175,7 @@ class AllegroOfferScanner {
 		this.titleIssues = []; // Lista naruszeń regulaminu Allegro w tytule
 
 		// Struktura nagłówków opisu
-		this.descriptionH1 = { exists: false, text: '' }; // Czy opis ma H1 na początku
+		this.descriptionH1 = { exists: false, titleMatch: false }; // Czy opis ma H1 na początku i czy zgodny z tytułem
 		this.descriptionH2 = { total: 0, withH2: 0, percent: 0 }; // Pokrycie sekcji nagłówkami H2
 
 			// Monety i Kupony
@@ -6620,14 +6620,21 @@ class AllegroOfferScanner {
 			return;
 		}
 
-		// H1 — sprawdzamy czy pierwszy węzeł blokowy to <h1>
-		const firstH1 = descContainer.querySelector('h1');
-		if (firstH1) {
-			this.descriptionH1 = { exists: true, text: firstH1.textContent.trim().substring(0, 100) };
-			console.log(`✅ Opis ma H1: "${this.descriptionH1.text}"`);
-		} else {
-			console.log('❌ Brak H1 w opisie');
-		}
+	// H1 — sprawdzamy czy opis ma <h1> i czy jego tekst jest zbliżony do tytułu oferty
+	const firstH1 = descContainer.querySelector('h1');
+	if (firstH1) {
+		const h1Text = firstH1.textContent.trim();
+		const offerTitle = (this.offerName || '').toLowerCase().replace(/\s+/g, ' ').trim();
+		const h1Lower = h1Text.toLowerCase().replace(/\s+/g, ' ').trim();
+		// Uznajemy za "zgodny" jeśli H1 zawiera choćby 50% słów z tytułu
+		const titleWords = offerTitle.split(' ').filter(w => w.length > 3);
+		const matchedWords = titleWords.filter(w => h1Lower.includes(w));
+		const titleMatch = titleWords.length > 0 && (matchedWords.length / titleWords.length) >= 0.5;
+		this.descriptionH1 = { exists: true, titleMatch };
+		console.log(`✅ Opis ma H1${titleMatch ? ' (zgodny z tytułem)' : ' (różny od tytułu)'}`);
+	} else {
+		console.log('❌ Brak H1 w opisie');
+	}
 
 		// H2 — liczymy sekcje z dłuższym tekstem (>80 znaków) i sprawdzamy ile ma H2
 		// "Sekcja" = bezpośrednie dziecko kontenera opisu będące blokiem (<div>, <section>, <article>)
@@ -8326,33 +8333,35 @@ class AllegroOfferScanner {
 								<strong>Rekomendacja:</strong> Optymalne: 5-10% pogrubionego tekstu. Wyróżnij najważniejsze informacje, ale nie przesadzaj.
 							</td>
 						</tr>
-						<tr>
-							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówek H1 w opisie</td>
-							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.descriptionH1.exists ? '#059669' : '#dc2626'};">
-								${this.descriptionH1.exists
-									? `✅ Obecny${this.descriptionH1.text ? ': „' + escapeHtml(this.descriptionH1.text.substring(0, 60)) + (this.descriptionH1.text.length > 60 ? '…' : '') + '"' : ''}`
-									: '❌ Brak – dodaj H1 na początku opisu (powtórzenie tytułu)'}
-							</td>
-						</tr>
-						<tr>
-							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówki H2 w sekcjach</td>
-							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.descriptionH2.total === 0 ? '#6b7280' : this.descriptionH2.percent >= 80 ? '#059669' : this.descriptionH2.percent >= 50 ? '#d97706' : '#dc2626'};">
-								${this.descriptionH2.total === 0
-									? '–'
-									: `${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (${this.descriptionH2.percent}%)`}
-							</td>
-						</tr>
-						${this.descriptionH2.total > 0 && this.descriptionH2.percent < 80 ? `
-						<tr>
-							<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#fef9c3; color:#713f12; font-size:12px;">
-								<strong>Rekomendacja:</strong> Dodaj nagłówki H2 do sekcji, które ich nie mają. Ułatwia to indeksowanie przez wyszukiwarki i poprawia czytelność opisu.
-							</td>
-						</tr>
-						` : ''}
-					</tbody>
-				</table>
-				
-				${this.descriptionAiAnalysis ? `
+					<tr>
+						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówek H1 w opisie</td>
+						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.descriptionH1.exists ? '#059669' : '#dc2626'};">
+							${this.descriptionH1.exists
+								? (this.descriptionH1.titleMatch ? '✅ Obecny – zgodny z tytułem' : '✅ Obecny')
+								: '❌ Brak – dodaj H1 na początku opisu (powtórzenie tytułu)'}
+						</td>
+					</tr>
+					<tr>
+						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówki H2 w sekcjach</td>
+						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.descriptionH2.total === 0 ? '#6b7280' : this.descriptionH2.percent === 100 ? '#059669' : '#d97706'};">
+							${this.descriptionH2.total === 0
+								? '–'
+								: this.descriptionH2.percent === 100
+									? `✅ ${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (100%)`
+									: `⚠️ ${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (${this.descriptionH2.percent}%)`}
+						</td>
+					</tr>
+					${this.descriptionH2.total > 0 && this.descriptionH2.percent < 100 ? `
+					<tr>
+						<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#fff7ed; border-left:3px solid #f97316; color:#7c2d12; font-size:12px;">
+							⚠️ <strong>Zalecane:</strong> Dodaj nagłówki H2 na początku sekcji, które ich nie mają (${this.descriptionH2.total - this.descriptionH2.withH2} z ${this.descriptionH2.total}). Nagłówki H2 poprawiają indeksowanie przez wyszukiwarki i czytelność opisu.
+						</td>
+					</tr>
+					` : ''}
+				</tbody>
+			</table>
+			
+			${this.descriptionAiAnalysis ? `
 					<div style="margin-top:24px; padding:16px; background:#f0f9ff; border-radius:8px; border:2px solid #3b82f6;">
 						<div style="font-weight:700; font-size:16px; color:#1e40af; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
 							🤖 Podsumowanie analizy opisu z AI
@@ -9619,26 +9628,35 @@ class AllegroOfferScanner {
 								<strong>Rekomendacja:</strong> Optymalne: 5-10% pogrubionego tekstu. Wyróżnij najważniejsze informacje, ale nie przesadzaj.
 							</td>
 						</tr>
-						<tr>
-							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówek H1 w opisie</td>
-							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:700; color:${this.descriptionH1.exists ? '#059669' : '#dc2626'};">
-								${this.descriptionH1.exists
-									? `✅ Obecny${this.descriptionH1.text ? ': „' + this.escapeHtml(this.descriptionH1.text.substring(0, 60)) + (this.descriptionH1.text.length > 60 ? '…' : '') + '"' : ''}`
-									: '❌ Brak – dodaj H1 na początku opisu'}
-							</td>
-						</tr>
-						<tr>
-							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówki H2 w sekcjach</td>
-							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:700; color:${this.descriptionH2.total === 0 ? '#6b7280' : this.descriptionH2.percent >= 80 ? '#059669' : this.descriptionH2.percent >= 50 ? '#d97706' : '#dc2626'};">
-								${this.descriptionH2.total === 0
-									? '–'
-									: `${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (${this.descriptionH2.percent}%)`}
-							</td>
-						</tr>
-					</tbody>
-				</table>
-				
-				${this.parametersInDescription.length > 0 ? `
+					<tr>
+						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówek H1 w opisie</td>
+						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:700; color:${this.descriptionH1.exists ? '#059669' : '#dc2626'};">
+							${this.descriptionH1.exists
+								? (this.descriptionH1.titleMatch ? '✅ Obecny – zgodny z tytułem' : '✅ Obecny')
+								: '❌ Brak – dodaj H1 na początku opisu (powtórzenie tytułu)'}
+						</td>
+					</tr>
+					<tr>
+						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówki H2 w sekcjach</td>
+						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:700; color:${this.descriptionH2.total === 0 ? '#6b7280' : this.descriptionH2.percent === 100 ? '#059669' : '#d97706'};">
+							${this.descriptionH2.total === 0
+								? '–'
+								: this.descriptionH2.percent === 100
+									? `✅ ${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (100%)`
+									: `⚠️ ${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (${this.descriptionH2.percent}%)`}
+						</td>
+					</tr>
+					${this.descriptionH2.total > 0 && this.descriptionH2.percent < 100 ? `
+					<tr>
+						<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#fff7ed; border-left:3px solid #f97316; color:#7c2d12; font-size:12px;">
+							⚠️ <strong>Zalecane:</strong> Dodaj nagłówki H2 na początku sekcji, które ich nie mają (${this.descriptionH2.total - this.descriptionH2.withH2} z ${this.descriptionH2.total}). Nagłówki H2 poprawiają indeksowanie przez wyszukiwarki i czytelność opisu.
+						</td>
+					</tr>
+					` : ''}
+				</tbody>
+			</table>
+			
+			${this.parametersInDescription.length > 0 ? `
 				<div style="margin-top:24px;">
 					<div style="font-weight:600; color:#374151; margin-bottom:12px; padding:8px; background:#f8fafc; border-radius:6px;">
 						📋 Parametry produktu w opisie (${this.parametersInDescriptionScore}% zgodności)
