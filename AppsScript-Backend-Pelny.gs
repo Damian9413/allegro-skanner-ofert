@@ -499,18 +499,19 @@ ${parametersText}
 Opis oferty:
 ${description.substring(0, 8000)}${description.length > 8000 ? '...[opis skrócony]' : ''}
 
-Odpowiedz w języku polskim, konkretnie i konstruktywnie. Zachowaj dokładnie tę strukturę (numeracja 1.–4.):
+Odpowiedz w języku polskim, konkretnie i konstruktywnie. Zachowaj dokładnie tę strukturę (numeracja 1.–4.).
+WAŻNE: Nie używaj wcięć ani spacji na początku linii – każda linia zaczyna się od lewej krawędzi (bez spacji/tabów przed tekstem).
 
 1. Krótkie podsumowanie jakości opisu (1–2 zdania): czy opis jest szczegółowy, co jest dobre, co wymaga poprawy (spójność, SEO, język korzyści).
 
 2. Zalety opisu:
-   • 3–4 główne zalety (punktory, np. szczegółowe dane techniczne, nacisk na wytrzymałość, informacje o funkcjach, jakość wykonania).
+• 3–4 główne zalety (punktory, np. szczegółowe dane techniczne, nacisk na wytrzymałość, informacje o funkcjach, jakość wykonania).
 
 3. Elementy do poprawy:
-   • 3–4 konkretne rzeczy do poprawy (punktory, np. brak słów kluczowych SEO na początku, za długi akapit, słabszy język korzyści, brak zachęty na początku).
+• 3–4 konkretne rzeczy do poprawy (punktory, np. brak słów kluczowych SEO na początku, za długi akapit, słabszy język korzyści, brak zachęty na początku).
 
 4. Sugestia do ulepszenia początku opisu:
-   Napisz gotowy, przykładowy akapit na początek opisu (2–3 zdania), który od razu przyciągnie uwagę i podkreśli główne zalety produktu. Nie pisz tylko wskazówek – podaj konkretny tekst do wklejenia.`;
+Napisz gotowy, przykładowy akapit na początek opisu (2–3 zdania), który od razu przyciągnie uwagę i podkreśli główne zalety produktu. Nie pisz tylko wskazówek – podaj konkretny tekst do wklejenia.`;
 
     const requestBody = {
       model: 'gpt-4o-mini',
@@ -1047,17 +1048,18 @@ function handleLogAICosts(data) {
       return createResponse(false, 'Błąd: brak danych do zapisania');
     }
 
-    // getRange(row, column, numRows, numColumns) – 3. parametr to LICZBA wierszy (1), nie numer ostatniego wiersza
-    costsSheet.getRange(newRow, 1, 1, rowData.length).setValues([rowData]);
+    // appendRow – zawsze dodaje 1 wiersz na końcu, unika błędu "Liczba wierszy danych nie jest zgodna"
+    costsSheet.appendRow(rowData);
+    const appendedRow = costsSheet.getLastRow();
 
-    Logger.log('✅ Koszty AI zalogowane: wiersz ' + newRow);
+    Logger.log('✅ Koszty AI zalogowane: wiersz ' + appendedRow);
     Logger.log(`💰 $${data.costUSD} USD (${data.costPLN} PLN) | ${data.tokensUsed} tokenów`);
 
     Logger.log('🔄 Aktualizuję łączne koszty użytkownika w arkuszu głównym...');
     updateUserTotalAICosts(data.userEmail);
 
     return createResponse(true, 'Koszty AI zalogowane', {
-      row: newRow,
+      row: appendedRow,
       tokensUsed: data.tokensUsed,
       costUSD: data.costUSD,
       costPLN: data.costPLN

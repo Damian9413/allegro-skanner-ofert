@@ -66,9 +66,44 @@
 	// ============= KALKULATOR KOSZTÓW OPENAI - KONIEC =============
 
 	// ============= SYSTEM AUTORYZACJI - POCZĄTEK =============
-	const API_URL = 'https://script.google.com/macros/s/AKfycbw1C63Ge0z6d-9bgS0BRJG1TjEboJ2UUUWMf3R_cXQ5eupLWzKkcw8DyP8oXgOqKYBREQ/exec';
+	// Pełny URL do Apps Script (w działającej wersji był pełny URL; sam ID powodował "Błąd połączenia z serwerem")
+	const API_URL = 'https://script.google.com/macros/s/AKfycbxFNv3LjfXFCtV4Wdc9xLZO1a4KX8zSdoWP4NxJkFZQR4zdePaw3l03gLSnAag39QW5Bg/exec';
 	// AI (obraz + opis) – po przeniesieniu do Apps Script używamy tego samego API_URL (zob. SERWER_I_OPCJE.md)
 	const AI_API_URL = API_URL;
+
+	/**
+	 * Wywołanie API przez background (service worker) – omija CORS przy żądaniach z allegro.pl do script.google.com.
+	 * Zwraca obiekt Response-like: { ok, status, statusText, json(), text() }.
+	 */
+	async function extensionFetch(url, options = {}) {
+		const fallback = { success: false, message: 'Błąd połączenia z serwerem' };
+		try {
+			const res = await chrome.runtime.sendMessage({ type: 'apiFetch', url, options });
+			if (!res) throw new Error('Brak odpowiedzi z background');
+			return {
+				ok: res.ok,
+				status: res.status,
+				statusText: res.statusText,
+				text: () => Promise.resolve(res.body || ''),
+				json: () => {
+					if (!res.body || !res.body.trim()) return Promise.resolve(fallback);
+					try {
+						return Promise.resolve(JSON.parse(res.body));
+					} catch (_) {
+						return Promise.resolve(fallback);
+					}
+				}
+			};
+		} catch (e) {
+			return {
+				ok: false,
+				status: 0,
+				statusText: e.message || 'Failed to fetch',
+				text: () => Promise.resolve(''),
+				json: () => Promise.resolve(fallback)
+			};
+		}
+	}
 
 	class AuthManager {
 		constructor() {
@@ -111,9 +146,7 @@
 		async login(email, password) {
 			try {
 				const url = `${API_URL}?action=login&email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
-				const response = await fetch(url, {
-					method: 'GET'
-				});
+				const response = await extensionFetch(url, { method: 'GET' });
 
 				const result = await response.json();
 
@@ -135,9 +168,7 @@
 		async register(email, password) {
 			try {
 				const url = `${API_URL}?action=register&email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
-				const response = await fetch(url, {
-					method: 'GET'
-				});
+				const response = await extensionFetch(url, { method: 'GET' });
 
 				const result = await response.json();
 
@@ -157,6 +188,24 @@
 			}
 		}
 
+		/**
+		 * Reset hasła – ustawia nowe hasło dla konta o podanym emailu (wymaga obsługi action=reset_password w Apps Script).
+		 */
+		async resetPassword(email, newPassword) {
+			try {
+				const url = `${API_URL}?action=reset_password&email=${encodeURIComponent(email)}&new_password=${encodeURIComponent(newPassword)}`;
+				const response = await extensionFetch(url, { method: 'GET' });
+				const result = await response.json();
+				if (result.success) {
+					return { success: true, message: result.message || 'Hasło zostało zmienione. Zaloguj się nowym hasłem.' };
+				}
+				return { success: false, message: result.message || 'Nie udało się zresetować hasła.' };
+			} catch (error) {
+				console.error('❌ Reset password error:', error);
+				return { success: false, message: 'Błąd połączenia z serwerem' };
+			}
+		}
+
 		async checkLimit() {
 			if (!this.isLoggedIn()) {
 				return { success: false, message: 'Nie jesteś zalogowany' };
@@ -164,18 +213,16 @@
 
 			try {
 				const url = `${API_URL}?action=check_limit&email=${encodeURIComponent(this.user.email)}`;
-				const response = await fetch(url, {
-					method: 'GET'
-				});
-
+				const response = await extensionFetch(url, { method: 'GET' });
 				const result = await response.json();
-
+				if (!result || typeof result.success === 'undefined') {
+					return { success: false, message: 'Błąd połączenia z serwerem (sprawdź URL wdrożenia Apps Script)' };
+				}
 				if (result.success) {
 					this.user.reportsRemaining = result.data.reportsRemaining;
 					this.user.reportsUsed = result.data.reportsUsed;
 					localStorage.setItem('allegro_scan_user', JSON.stringify(this.user));
 				}
-
 				return result;
 			} catch (error) {
 				console.error('❌ Check limit error:', error);
@@ -194,19 +241,17 @@
 
 			try {
 				const url = `${API_URL}?action=use_report&email=${encodeURIComponent(this.user.email)}`;
-				const response = await fetch(url, {
-					method: 'GET'
-				});
-
+				const response = await extensionFetch(url, { method: 'GET' });
 				const result = await response.json();
-
+				if (!result || typeof result.success === 'undefined') {
+					return { success: false, message: 'Błąd połączenia z serwerem (sprawdź URL wdrożenia Apps Script)' };
+				}
 				if (result.success) {
 					this.user.reportsUsed = result.data.reportsUsed;
 					this.user.reportsRemaining = result.data.reportsRemaining;
 					localStorage.setItem('allegro_scan_user', JSON.stringify(this.user));
 					console.log('✅ Report used. Remaining:', result.data.reportsRemaining);
 				}
-
 				return result;
 			} catch (error) {
 				console.error('❌ Use report error:', error);
@@ -225,7 +270,7 @@
 
 			try {
 				const url = `${AI_API_URL}?action=log_ai_costs`;
-				const response = await fetch(url, {
+				const response = await extensionFetch(url, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json'
@@ -289,7 +334,7 @@
 					ratingsCount: Object.keys(ratings).length
 				});
 
-				const response = await fetch(url, {
+				const response = await extensionFetch(url, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'text/plain;charset=utf-8'
@@ -381,6 +426,21 @@
 		async analyzeImage(imageUrl, imageElement, isThumbnail = true) {
 			console.log('🔍 Rozpoczynam analizę obrazu:', imageUrl);
 
+			if (!imageUrl || !imageElement) {
+				console.warn('⚠️ Brak URL lub elementu obrazu – pomijam analizę');
+				return {
+					resolution: { status: 'unknown', score: 0, width: 0, height: 0, message: 'Brak danych' },
+					whiteBorders: { detected: false, topPercent: 0, bottomPercent: 0, leftPercent: 0, rightPercent: 0, totalPercent: 0, status: 'unknown' },
+					dpi: { estimated: 0, quality: 'unknown', message: 'Brak danych' },
+					backgroundWhiteness: 0,
+					complexity: { score: 0, uniqueColors: 0, status: 'unknown', message: 'Brak danych' },
+					textDetected: { hasText: false, confidence: 0, text: '', status: 'unknown', message: 'Brak danych' },
+					excessiveSize: { isExcessive: false, megapixels: 0, message: '' },
+					overallScore: 0,
+					errors: ['Brak elementu lub URL obrazu']
+				};
+			}
+
 			// Konwertuj URL na oryginalny rozmiar dla lepszej analizy
 			const originalImageUrl = this.getOriginalImageUrl(imageUrl);
 
@@ -458,8 +518,11 @@
 		 * @returns {Object} Status rozdzielczości
 		 */
 		checkResolution(imageElement) {
-			const width = imageElement.naturalWidth;
-			const height = imageElement.naturalHeight;
+			if (!imageElement || typeof imageElement.naturalWidth === 'undefined') {
+				return { status: 'unknown', score: 0, width: 0, height: 0, message: 'Brak danych obrazu' };
+			}
+			const width = imageElement.naturalWidth || 0;
+			const height = imageElement.naturalHeight || 0;
 
 			let status, score;
 
@@ -655,9 +718,12 @@
 		 * @returns {Object}
 		 */
 		measureDPI(imageElement) {
-			const naturalWidth = imageElement.naturalWidth;
-			const naturalHeight = imageElement.naturalHeight;
-			const displayWidth = imageElement.offsetWidth || imageElement.clientWidth;
+			if (!imageElement || typeof imageElement.naturalWidth === 'undefined') {
+				return { estimated: 0, quality: 'unknown', message: 'Brak danych' };
+			}
+			const naturalWidth = imageElement.naturalWidth || 0;
+			const naturalHeight = imageElement.naturalHeight || 0;
+			const displayWidth = imageElement.offsetWidth || imageElement.clientWidth || 0;
 
 			let estimatedDpi = 0;
 			let quality = 'unknown';
@@ -786,7 +852,10 @@
 					{
 						logger: m => {
 							if (m.status === 'recognizing text') {
-								console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+								const pct = Math.round(m.progress * 100);
+								if (pct === 0 || pct === 50 || pct === 100) {
+									console.log(`OCR Progress: ${pct}%`);
+								}
 							}
 						}
 					}
@@ -886,8 +955,11 @@
 		 * @returns {Object}
 		 */
 		checkExcessiveSize(imageElement) {
-			const width = imageElement.naturalWidth;
-			const height = imageElement.naturalHeight;
+			if (!imageElement || typeof imageElement.naturalWidth === 'undefined') {
+				return { isExcessive: false, megapixels: 0, message: '' };
+			}
+			const width = imageElement.naturalWidth || 0;
+			const height = imageElement.naturalHeight || 0;
 			const megapixels = (width * height) / 1000000;
 
 			// Nadmierny rozmiar > 10 megapikseli
@@ -1186,7 +1258,11 @@ class AllegroOfferScanner {
 		}
 
 		async init() {
-			this.ensureUIInjected();
+			try {
+				this.ensureUIInjected();
+			} catch (e) {
+				console.warn('⚠️ ensureUIInjected:', e && e.message);
+			}
 			if (!this.uiKeepAliveTimer) {
 				this.uiKeepAliveTimer = setInterval(() => {
 					try {
@@ -1198,13 +1274,25 @@ class AllegroOfferScanner {
 				window.addEventListener('beforeunload', () => { try { clearInterval(this.uiKeepAliveTimer); } catch (_) {} }, { once: true });
 			}
 
-			// Jeśli użytkownik zalogowany, odśwież licznik raportów z serwera
-			if (authManager.isLoggedIn()) {
-				await this.refreshReportsCount();
+			try {
+				// Jeśli użytkownik zalogowany, odśwież licznik raportów z serwera
+				if (authManager.isLoggedIn()) {
+					await this.refreshReportsCount();
+				}
+			} catch (e) {
+				console.warn('⚠️ refreshReportsCount:', e && e.message);
 			}
 
-			// Pierwsze skanowanie - bez otwierania dialogów (szybkie)
-			this.scanBasicData();
+			try {
+				// Pierwsze skanowanie - bez otwierania dialogów (szybkie)
+				await this.scanBasicData();
+			} catch (e) {
+				console.error('❌ Błąd podczas podstawowego skanowania (strona może mieć inny układ, np. /produkt/):', e);
+				try {
+					const timeEl = document.getElementById(this.lastScanLabelId);
+					if (timeEl) timeEl.textContent = 'Błąd skanowania – sprawdź konsolę (F12)';
+				} catch (_) {}
+			}
 			// Wyłączone automatyczne skanowanie przy zmianach DOM - eliminuje zapętlenie
 			// this.observeDomChanges();
 		}
@@ -1331,21 +1419,32 @@ class AllegroOfferScanner {
 		createUI() {
 			if (document.getElementById(this.uiRootId)) return;
 
+			// Załaduj nowoczesną czcionkę Inter (jeśli jeszcze nie załadowana)
+			if (!document.getElementById('wt-skan-font-inter')) {
+				const link = document.createElement('link');
+				link.id = 'wt-skan-font-inter';
+				link.rel = 'stylesheet';
+				link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
+				document.head.appendChild(link);
+			}
+
 			const root = document.createElement('div');
 			root.id = this.uiRootId;
 			root.style.cssText = [
 				'position: fixed',
-				'top: 20px',
+				'top: 72px',
 				'right: 20px',
 				'width: 340px',
 				'background: #ffffff',
-				'border: 2px solid #ff5a00',
-				'border-radius: 12px',
-				'box-shadow: 0 6px 20px rgba(0,0,0,0.15)',
+				'border: 1px solid rgba(255, 90, 0, 0.25)',
+				'border-radius: 16px',
+				'box-shadow: 0 10px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
 				'z-index: 2147483647',
-				'font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif',
+				'font-family: \'Inter\', system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
 				'font-size: 14px',
 				'color: #1f2937',
+				'letter-spacing: -0.01em',
+				'line-height: 1.5',
 				'max-height: 80vh',
 				'overflow-y: auto'
 			].join(';');
@@ -1354,10 +1453,11 @@ class AllegroOfferScanner {
 			header.style.cssText = [
 				'background: linear-gradient(135deg, #ff5a00, #e04e00)',
 				'color: #fff',
-				'padding: 12px 16px',
-				'border-radius: 10px 10px 0 0',
-				'font-weight: bold',
-				'font-size: 16px',
+				'padding: 14px 18px',
+				'border-radius: 16px 16px 0 0',
+				'font-weight: 600',
+				'font-size: 15px',
+				'letter-spacing: -0.02em',
 				'position: sticky',
 				'top: 0',
 				'z-index: 1',
@@ -1388,7 +1488,11 @@ class AllegroOfferScanner {
 
 			const content = document.createElement('div');
 			content.id = this.uiRootId + '-content';
-			content.style.cssText = 'padding: 16px;';
+			content.style.cssText = 'padding: 16px; -webkit-user-select: text; user-select: text;';
+			// Zatrzymaj propagację klawiszy do strony Allegro, żeby w polach input dało się pisać
+			content.addEventListener('keydown', e => e.stopPropagation(), true);
+			content.addEventListener('keypress', e => e.stopPropagation(), true);
+			content.addEventListener('input', e => e.stopPropagation(), true);
 
 			// SEKCJA AUTORYZACJI
 			const authSection = document.createElement('div');
@@ -1487,7 +1591,26 @@ class AllegroOfferScanner {
 					<button id="login-btn" style="width: 100%; padding: 8px; background: #059669; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;">
 						Zaloguj się
 					</button>
+					<div style="margin-top: 8px; text-align: center;">
+						<a id="link-forgot-password" href="#" style="font-size: 12px; color: #059669;">Zapomniałem hasła</a>
+					</div>
 					<div id="login-error" style="color: #dc2626; font-size: 12px; margin-top: 8px; display: none;"></div>
+				</div>
+
+				<!-- FORMULARZ RESET HASŁA -->
+				<div id="reset-form" style="display: none;">
+					<div style="font-weight: 600; color: #374151; margin-bottom: 12px;">🔑 Ustaw nowe hasło</div>
+					<input type="email" id="reset-email" placeholder="Email" style="width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; box-sizing: border-box;" />
+					<input type="password" id="reset-new-password" placeholder="Nowe hasło (min. 6 znaków)" style="width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; box-sizing: border-box;" />
+					<input type="password" id="reset-confirm-password" placeholder="Powtórz hasło" style="width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; box-sizing: border-box;" />
+					<button id="reset-btn" style="width: 100%; padding: 8px; background: #059669; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;">
+						Ustaw nowe hasło
+					</button>
+					<div style="margin-top: 8px; text-align: center;">
+						<a id="link-back-to-login" href="#" style="font-size: 12px; color: #059669;">← Wróć do logowania</a>
+					</div>
+					<div id="reset-error" style="color: #dc2626; font-size: 12px; margin-top: 8px; display: none;"></div>
+					<div id="reset-success" style="color: #059669; font-size: 12px; margin-top: 8px; display: none;"></div>
 				</div>
 				
 				<!-- FORMULARZ REJESTRACJI -->
@@ -1568,6 +1691,73 @@ class AllegroOfferScanner {
 						passwordInput.addEventListener('keypress', (e) => {
 							if (e.key === 'Enter') {
 								loginBtn.click();
+							}
+						});
+					}
+
+					// Zapomniałem hasła – pokaż formularz resetu
+					const linkForgot = document.getElementById('link-forgot-password');
+					const linkBackToLogin = document.getElementById('link-back-to-login');
+					const resetForm = document.getElementById('reset-form');
+					if (linkForgot && linkBackToLogin && resetForm) {
+						linkForgot.addEventListener('click', (e) => {
+							e.preventDefault();
+							loginForm.style.display = 'none';
+							registerForm.style.display = 'none';
+							resetForm.style.display = 'block';
+						});
+						linkBackToLogin.addEventListener('click', (e) => {
+							e.preventDefault();
+							resetForm.style.display = 'none';
+							loginForm.style.display = 'block';
+							document.getElementById('reset-error').style.display = 'none';
+							document.getElementById('reset-success').style.display = 'none';
+						});
+					}
+
+					// Reset hasła – wyślij do API
+					const resetBtn = document.getElementById('reset-btn');
+					const resetEmail = document.getElementById('reset-email');
+					const resetNewPass = document.getElementById('reset-new-password');
+					const resetConfirm = document.getElementById('reset-confirm-password');
+					const resetError = document.getElementById('reset-error');
+					const resetSuccess = document.getElementById('reset-success');
+					if (resetBtn && resetEmail && resetNewPass && resetConfirm) {
+						resetBtn.addEventListener('click', async () => {
+							const email = resetEmail.value.trim();
+							const newPass = resetNewPass.value;
+							const confirmPass = resetConfirm.value;
+							resetError.style.display = 'none';
+							resetSuccess.style.display = 'none';
+							if (!email) {
+								resetError.textContent = 'Wprowadź email';
+								resetError.style.display = 'block';
+								return;
+							}
+							if (newPass.length < 6) {
+								resetError.textContent = 'Hasło musi mieć min. 6 znaków';
+								resetError.style.display = 'block';
+								return;
+							}
+							if (newPass !== confirmPass) {
+								resetError.textContent = 'Hasła nie są identyczne';
+								resetError.style.display = 'block';
+								return;
+							}
+							resetBtn.textContent = 'Zapisywanie...';
+							resetBtn.disabled = true;
+							const result = await authManager.resetPassword(email, newPass);
+							resetBtn.textContent = 'Ustaw nowe hasło';
+							resetBtn.disabled = false;
+							if (result.success) {
+								resetSuccess.textContent = result.message || 'Hasło zmienione. Zaloguj się.';
+								resetSuccess.style.display = 'block';
+								resetEmail.value = '';
+								resetNewPass.value = '';
+								resetConfirm.value = '';
+							} else {
+								resetError.textContent = result.message || 'Błąd resetu hasła';
+								resetError.style.display = 'block';
 							}
 						});
 					}
@@ -1910,13 +2100,29 @@ class AllegroOfferScanner {
 			console.log('🚀 Rozpoczynam podstawowe skanowanie...');
 			console.log('📄 URL strony:', window.location.href);
 
-			this.productName = this.getProductName();
-			this.offerName = this.getOfferName();
-			this.nameMatchStatus = this.compareNames();
-			this.getProductRating();
-			this.evaluateProductRating();
-			await this.checkThumbnail();
-			this.scanAllImages();
+			try {
+				this.productName = this.getProductName();
+				this.offerName = this.getOfferName();
+				this.nameMatchStatus = this.compareNames();
+				this.getProductRating();
+				this.evaluateProductRating();
+			} catch (e) {
+				console.warn('⚠️ Błąd przy nazwach/ocenach:', e && e.message);
+			}
+
+			try {
+				await this.checkThumbnail();
+			} catch (e) {
+				console.warn('⚠️ Błąd przy miniaturach:', e && e.message);
+				this.hasThumbnail = false;
+			}
+
+			try {
+				this.scanAllImages();
+			} catch (e) {
+				console.warn('⚠️ Błąd przy skanowaniu obrazów:', e && e.message);
+				this.allImages = [];
+			}
 
 			// RESETUJ FLAGI
 			this.hasAllegroSmart = false;
@@ -1927,27 +2133,46 @@ class AllegroOfferScanner {
 			this.trustInfoOpened = false;
 			this.parametersOpened = false;
 
-			// Sprawdzenie funkcji Allegro
-			this.checkAllegroFeatures();
-			this.scanCoinsAndCoupons();
-
-			// BEZ otwierania dialogów - to zrobimy przed generowaniem PDF
-			this.offerQuality = this.calculateOfferQuality();
-			this.lastScanDate = new Date();
-
-			const timeEl = document.getElementById(this.lastScanLabelId);
-			const qualityEl = document.getElementById('wt-skan-quality');
-			const imageQualityEl = document.getElementById('wt-skan-image-quality');
-
-			if (timeEl) timeEl.textContent = this.formatDateTime(this.lastScanDate);
-			if (qualityEl) qualityEl.textContent = this.offerQuality + '%';
-			if (imageQualityEl) {
-				const score = this.imageQuality.overallScore || 0;
-				imageQualityEl.textContent = score + '%';
-				imageQualityEl.style.color = score >= 80 ? '#059669' : score >= 60 ? '#f59e0b' : '#dc2626';
+			try {
+				this.checkAllegroFeatures();
+			} catch (e) {
+				console.warn('⚠️ Błąd przy funkcjach Allegro:', e && e.message);
 			}
 
-			this.updateImagesUI();
+			try {
+				this.scanCoinsAndCoupons();
+			} catch (e) {
+				console.warn('⚠️ Błąd przy monetach/kuponach:', e && e.message);
+			}
+
+			try {
+				// BEZ otwierania dialogów - to zrobimy przed generowaniem PDF
+				this.offerQuality = this.calculateOfferQuality();
+				this.lastScanDate = new Date();
+			} catch (e) {
+				console.warn('⚠️ Błąd przy jakości oferty:', e && e.message);
+				this.offerQuality = 0;
+				this.lastScanDate = new Date();
+			}
+
+			try {
+				const timeEl = document.getElementById(this.lastScanLabelId);
+				const qualityEl = document.getElementById('wt-skan-quality');
+				const imageQualityEl = document.getElementById('wt-skan-image-quality');
+
+				if (timeEl) timeEl.textContent = this.formatDateTime(this.lastScanDate);
+				if (qualityEl) qualityEl.textContent = this.offerQuality + '%';
+				if (imageQualityEl) {
+					const score = this.imageQuality.overallScore || 0;
+					imageQualityEl.textContent = score + '%';
+					imageQualityEl.style.color = score >= 80 ? '#059669' : score >= 60 ? '#f59e0b' : '#dc2626';
+				}
+
+				this.updateImagesUI();
+			} catch (e) {
+				console.warn('⚠️ Błąd przy aktualizacji UI:', e && e.message);
+			}
+
 			console.log('✅ Podstawowe skanowanie zakończone');
 		}
 
@@ -2027,21 +2252,14 @@ class AllegroOfferScanner {
 				return;
 			}
 
-			// Dodatkowe logowanie dla debug
 			const allMryxSections = document.querySelectorAll('div.mryx_16');
-			console.log(`🔍 Znaleziono ${allMryxSections.length} sekcji z klasą mryx_16`);
-			for (let i = 0; i < allMryxSections.length; i++) {
-				const section = allMryxSections[i];
-				const hasInnerSection = section.querySelector('div._7030e_qVLm-');
-				const hasImages = section.querySelectorAll('img').length > 0;
-				const hasBundle = section.innerHTML.includes('bundle_id');
-				const isSelected = section === mainPriceSection;
-
-				console.log(`  Sekcja ${i + 1}: wewnętrzna=${!!hasInnerSection}, obrazy=${hasImages}, bundle=${hasBundle} ${isSelected ? '← WYBRANA' : ''}`);
+			const selectedIdx = Array.from(allMryxSections).indexOf(mainPriceSection);
+			if (selectedIdx >= 0) {
+				const s = mainPriceSection;
+				const hasInner = !!s.querySelector('div._7030e_qVLm-');
+				const hasImages = s.querySelectorAll('img').length > 0;
+				console.log(`🔍 Sekcja cenowa: ${allMryxSections.length} sekcji mryx_16, wybrano #${selectedIdx + 1} (wewnętrzna=${hasInner}, obrazy=${hasImages})`);
 			}
-
-			// Dodaj możliwość dump HTML dla debugowania
-			this.debugDumpPriceSection();
 
 			// Pierwsza próba - natychmiast
 			console.log('🔍 === ROZPOCZYNAM SPRAWDZENIE FUNKCJI ===');
@@ -2725,26 +2943,16 @@ class AllegroOfferScanner {
 
 		let foundImage = null;
 
-		// METODA 1 (PRIORYTET): Szukanie elementu z aria-current="true" - aktywna miniatura w galerii
-		console.log('🔍 Szukam aktywnej miniatury w galerii (aria-current="true")...');
-		
-		const mainThumbnail = document.querySelector('[aria-current="true"]');
-		if (mainThumbnail) {
-			console.log('✅ Znaleziono element z aria-current="true"');
-
-			// Jeśli znaleziony element sam jest obrazkiem
-			if (mainThumbnail.tagName === 'IMG') {
-				foundImage = mainThumbnail;
-				console.log('✅ To jest główny obraz miniatury');
-			}
-			// Jeśli znaleziony element jest kontenerem, szukaj w nim obrazka
-			else {
-				const mainImage = mainThumbnail.querySelector('img');
-				if (mainImage) {
-					foundImage = mainImage;
-					console.log('✅ Znaleziono główny obraz miniatury w elemencie z aria-current="true"');
-				}
-			}
+		// METODA 1: Kontener produktu Allegro (najbardziej precyzyjne – miniatura oferty)
+		console.log('🔍 Szukam głównego obrazu produktu (kontener produktu)...');
+		const productContainerSelector = '.mp7g_f6.mq1m_0.mj7u_0.mpof_ki.m7er_k4.mr0s_7s.mdwt_en._07951_LNfmY';
+		const productContainer = document.querySelector(productContainerSelector);
+		if (productContainer) {
+			console.log('✅ Znaleziono kontener produktu');
+			foundImage = productContainer.querySelector('img');
+			if (!foundImage) foundImage = productContainer.querySelector('div img');
+			if (!foundImage) foundImage = productContainer.querySelector('img[src*="/s512/"]');
+			if (foundImage) console.log('✅ Znaleziono główny obraz produktu w kontenerze:', foundImage.src);
 		}
 
 		// METODA 2: Szukanie po typowych rozmiarach Allegro (/s512/, /s1024/, /s800/)
@@ -2771,19 +2979,51 @@ class AllegroOfferScanner {
 			}
 		}
 
-		// METODA 3: Szukanie elementu z klasami aktywności
+		// METODA 3: Szukanie po domenie allegroimg.com (ogólne)
+		if (!foundImage) {
+			console.log('🔄 Próba znalezienia obrazu po domenie allegroimg.com...');
+			const allImages = document.querySelectorAll('img');
+			for (const img of allImages) {
+				if (img.src && img.src.includes('a.allegroimg.com') &&
+					!img.src.includes('logo') && !img.src.includes('icon') &&
+					!img.src.includes('banner') && !img.src.includes('ad') &&
+					!img.src.includes('thank-you-page') && !img.src.includes('placeholder') &&
+					!img.src.includes('metrum-placeholder') && !img.src.includes('wosp') &&
+					!img.src.includes('charity') && !img.src.includes('badge')) {
+					if (img.naturalWidth > 100 && img.naturalHeight > 100) {
+						foundImage = img;
+						console.log('✅ Znaleziono główny obraz produktu po domenie:', img.src);
+						break;
+					}
+				}
+			}
+		}
+
+		// METODA 4: Szukanie elementu z aria-current="true" (zapasowa) – z walidacją URL
+		if (!foundImage) {
+			console.log('🔄 Próba znalezienia elementu z aria-current="true"...');
+			const mainThumbnail = document.querySelector('[aria-current="true"]');
+			if (mainThumbnail) {
+				let candidate = mainThumbnail.tagName === 'IMG' ? mainThumbnail : mainThumbnail.querySelector('img');
+				if (candidate && candidate.src && candidate.src.includes('a.allegroimg.com') &&
+					(candidate.src.includes('/s512/') || candidate.src.includes('/s1024/') || candidate.src.includes('/s800/')) &&
+					!candidate.src.includes('logo') && !candidate.src.includes('icon') &&
+					!candidate.src.includes('badge') && !candidate.src.includes('smart')) {
+					foundImage = candidate;
+					console.log('✅ Znaleziono główny obraz miniatury w elemencie z aria-current="true"');
+				} else if (candidate) {
+					console.log('⚠️ Odrzucono obraz z aria-current (nie miniatura oferty)');
+				}
+			}
+		}
+
+		// METODA 5: Szukanie elementu z klasami aktywności
 		if (!foundImage) {
 			console.log('🔄 Próba znalezienia elementu z klasą aktywności...');
-
-			// Szukaj elementu .carousel-item z klasą 'active', 'is-active', 'selected'
 			let mainThumbnailContainer = document.querySelector('.carousel-item.active') ||
 				document.querySelector('.carousel-item.is-active') ||
 				document.querySelector('.carousel-item.selected');
-
 			if (mainThumbnailContainer) {
-				console.log('✅ Znaleziono kontener miniatury z klasą aktywności');
-
-				// Sprawdź czy w kontenerze jest obrazek
 				const mainImage = mainThumbnailContainer.querySelector('img');
 				if (mainImage) {
 					foundImage = mainImage;
@@ -2792,19 +3032,26 @@ class AllegroOfferScanner {
 			}
 		}
 
-		// METODA 4: Szukanie pierwszego elementu .carousel-item z obrazkiem
+		// METODA 6: Szukanie pierwszego elementu .carousel-item z obrazkiem
 		if (!foundImage) {
 			console.log('🔄 Próba znalezienia pierwszego elementu karuzeli...');
-
 			const firstCarouselItem = document.querySelector('.carousel-item:first-child');
 			if (firstCarouselItem) {
-				console.log('✅ Znaleziono pierwszy element karuzeli');
-
 				const mainImage = firstCarouselItem.querySelector('img');
 				if (mainImage) {
 					foundImage = mainImage;
 					console.log('✅ Znaleziono obraz miniatury w pierwszym elemencie karuzeli');
 				}
+			}
+		}
+
+		// METODA 7: Szukanie pierwszego obrazka na stronie (ostatnia szansa)
+		if (!foundImage) {
+			console.log('🔄 Próba znalezienia pierwszego obrazka na stronie...');
+			const firstImage = document.querySelector('img');
+			if (firstImage && firstImage.src && !firstImage.src.includes('logo') && !firstImage.src.includes('icon')) {
+				foundImage = firstImage;
+				console.log('✅ Znaleziono pierwszy obrazek (prawdopodobnie miniatura)');
 			}
 		}
 
@@ -3304,7 +3551,6 @@ class AllegroOfferScanner {
 
 			for (let i = 0; i < additionalSections.length; i++) {
 				const section = additionalSections[i];
-				console.log(`🔍 Sprawdzam sekcję myre_zn #${i + 1}...`);
 
 				if (!this.hasCoins) {
 					this.scanSmartCoins(section);
@@ -3315,7 +3561,11 @@ class AllegroOfferScanner {
 
 				// Przerwij jeśli znaleziono wszystko
 				if (this.hasCoins && this.coupons.length > 0) {
-					console.log('✅ Znaleziono wszystko w sekcji #' + (i + 1));
+					console.log('✅ Znaleziono monety i kupony w sekcji #' + (i + 1));
+					break;
+				}
+				// Optymalizacja: po 50 sekcjach bez kupony/monet – przerwij (zazwyczaj są w pierwszych)
+				if (i >= 50 && !this.hasCoins && this.coupons.length === 0) {
 					break;
 				}
 			}
@@ -3355,58 +3605,38 @@ class AllegroOfferScanner {
 		}
 
 		scanSmartCoins(section) {
-			console.log('🔍 Szukam Smart! Monet...');
-
 			// METODA 1: Szukanie obrazu z alt="Monety"
 			const coinsImage = section.querySelector('img[alt="Monety"]');
 			if (coinsImage) {
-				console.log('✅ Znaleziono obraz Smart! Monet');
-
-				// Szukaj tekstu z liczbą monet w pobliżu - rozszerzone wyszukiwanie
-				let searchAreas = [];
-
-				// Dodaj różne obszary wyszukiwania
 				const immediateParent = coinsImage.closest('div');
 				const grandParent = coinsImage.closest('div.myre_zn') || coinsImage.closest('div.mpof_ki');
 				const sectionParent = coinsImage.closest('section');
+				const searchAreas = [
+					...(immediateParent ? [{ area: immediateParent }] : []),
+					...(grandParent && grandParent !== immediateParent ? [{ area: grandParent }] : []),
+					...(sectionParent && sectionParent !== grandParent ? [{ area: sectionParent }] : [])
+				];
 
-				if (immediateParent) searchAreas.push({ area: immediateParent, name: 'immediate parent' });
-				if (grandParent && grandParent !== immediateParent) searchAreas.push({ area: grandParent, name: 'grand parent' });
-				if (sectionParent && sectionParent !== grandParent) searchAreas.push({ area: sectionParent, name: 'section parent' });
-
-				console.log(`🔍 Sprawdzam ${searchAreas.length} obszarów wokół obrazu monet`);
-
-				for (const { area, name } of searchAreas) {
-					console.log(`🔍 Sprawdzam obszar: ${name}`);
+				for (const { area } of searchAreas) {
 					const spans = area.querySelectorAll('span');
-					console.log(`📊 Znaleziono ${spans.length} elementów span w ${name}`);
-
 					for (const span of spans) {
 						const text = span.textContent ? span.textContent.trim() : '';
 						if (text && (text.includes('Smart! Monet') || text.includes('Smart! Monety'))) {
-							console.log('📝 Znaleziono tekst z monetami:', text);
-
-							// Wyodrębnienie liczby monet (obsługa liczby pojedynczej i mnogiej)
 							const coinsMatch = text.match(/(\d+)\s*Smart!\s*Monet[ey]?/i);
 							if (coinsMatch) {
 								this.coinsAmount = parseInt(coinsMatch[1]);
 								this.coinsDescription = text;
 								this.hasCoins = true;
-								console.log('✅ Wykryto', this.coinsAmount, 'Smart! Monet/Monety w obszarze:', name);
 								return;
 							}
 						}
 					}
 				}
-
-				console.log('⚠️ Znaleziono obraz monet, ale nie znaleziono tekstu z liczbą');
 			}
 
 			// METODA 2: Szukanie przez src obrazu zawierający "smart-coins"
 			const coinsImageBySrc = section.querySelector('img[src*="smart-coins"]');
 			if (coinsImageBySrc && !this.hasCoins) {
-				console.log('✅ Znaleziono obraz Smart! Monet przez src');
-
 				const parent = coinsImageBySrc.closest('div');
 				if (parent) {
 					const spans = parent.querySelectorAll('span');
@@ -3418,7 +3648,6 @@ class AllegroOfferScanner {
 								this.coinsAmount = parseInt(coinsMatch[1]);
 								this.coinsDescription = text;
 								this.hasCoins = true;
-								console.log('✅ Wykryto', this.coinsAmount, 'monet przez src');
 								return;
 							}
 						}
@@ -3436,7 +3665,6 @@ class AllegroOfferScanner {
 						this.coinsAmount = parseInt(coinsMatch[1]);
 						this.coinsDescription = text;
 						this.hasCoins = true;
-						console.log('✅ Wykryto', this.coinsAmount, 'Smart! Monet/Monety przez tekst');
 						return;
 					}
 				}
@@ -3450,46 +3678,34 @@ class AllegroOfferScanner {
 					for (const span of spans) {
 						const text = span.textContent ? span.textContent.trim() : '';
 						if (text && (text.includes('Smart! Monet') || text.includes('Smart! Monety'))) {
-							console.log('📝 Znaleziono tekst w kontenerze _7030e_Ftsct:', text);
 							const coinsMatch = text.match(/(\d+)\s*Smart!\s*Monet[ey]?/i);
 							if (coinsMatch) {
 								this.coinsAmount = parseInt(coinsMatch[1]);
 								this.coinsDescription = text;
 								this.hasCoins = true;
-								console.log('✅ Wykryto', this.coinsAmount, 'Smart! Monet/Monety w kontenerze specjalnym');
 								return;
 							}
 						}
 					}
 				}
 			}
-
-			console.log('❌ Nie znaleziono Smart! Monet');
 		}
 
 		scanCoupons(section) {
-			console.log('🎫 Szukam kuponów...');
-
 			// METODA 1: Szukanie obrazu kuponu
 			const couponImages = section.querySelectorAll('img[alt="kupon"], img[src*="COUPON"], img[src*="coupon"]');
 
-			couponImages.forEach((img, index) => {
-				console.log(`🔍 Znaleziono obraz kuponu ${index + 1}`);
-
-				// Szukaj opisu kuponu w pobliżu
+			couponImages.forEach((img) => {
 				const parent = img.closest('div');
 				if (parent) {
 					const spans = parent.querySelectorAll('span');
 					for (const span of spans) {
 						if (span.textContent && (span.textContent.includes('taniej') || span.textContent.includes('zł') || span.textContent.includes('%'))) {
 							const text = span.textContent.trim();
-							console.log('📝 Znaleziono tekst kuponu:', text);
-
 							const coupon = this.parseCouponText(text);
 							if (coupon) {
 								this.coupons.push(coupon);
 								this.hasCoupons = true;
-								console.log('✅ Dodano kupon:', coupon.description);
 							}
 						}
 					}
@@ -3499,18 +3715,13 @@ class AllegroOfferScanner {
 			// METODA 2: Szukanie linków z href="#available-coupons"
 			const couponLinks = section.querySelectorAll('a[href*="available-coupons"], a[href*="coupon"]');
 
-			couponLinks.forEach((link, index) => {
-				console.log(`🔍 Znaleziono link kuponu ${index + 1}`);
-
+			couponLinks.forEach((link) => {
 				const text = link.textContent ? link.textContent.trim() : '';
 				if (text && (text.includes('taniej') || text.includes('zł') || text.includes('%'))) {
-					console.log('📝 Znaleziono tekst kuponu w linku:', text);
-
 					const coupon = this.parseCouponText(text);
 					if (coupon && !this.coupons.some(c => c.description === coupon.description)) {
 						this.coupons.push(coupon);
 						this.hasCoupons = true;
-						console.log('✅ Dodano kupon z linku:', coupon.description);
 					}
 				}
 			});
@@ -3525,18 +3736,11 @@ class AllegroOfferScanner {
 					if (coupon && !this.coupons.some(c => c.description === coupon.description)) {
 						this.coupons.push(coupon);
 						this.hasCoupons = true;
-						console.log('✅ Dodano kupon z tekstu:', coupon.description);
 					}
 				}
 			});
 
 			this.couponsCount = this.coupons.length;
-
-			if (this.couponsCount === 0) {
-				console.log('❌ Nie znaleziono kuponów');
-			} else {
-				console.log(`✅ Znaleziono ${this.couponsCount} kuponów`);
-			}
 		}
 
 		parseCouponText(text) {
@@ -4259,11 +4463,11 @@ class AllegroOfferScanner {
 				this.suggestionsQualityScore = 100;
 				console.log('📈 Ocena: BARDZO DOBRZE - Jest zakładka z marką');
 			} else {
-			// Tylko "Pokrewne" — działa najczęściej na minus
+			// Tylko "Pokrewne" — zachęcamy do popularyzacji marki
 			qualityRating = '❌ Słabo';
 			qualityColor = '#f59e0b'; // pomarańczowy
-			qualityMessage = 'Zakładka "Pokrewne" najczęściej działa na minus — usuń ją.';
-			recommendation = 'Wyrzuć zakładkę "Pokrewne" z oferty, aby ograniczyć rozpraszanie i potencjalną utratę ruchu.';
+			qualityMessage = 'Zamiast zakładki Pokrewne lepiej mieć zakładkę z produktami marki.';
+			recommendation = 'Popularyzuj markę w Allegro i poza nim, aby zamiast zakładki Pokrewne wyświetlały się tylko produkty marki.';
 			this.suggestionsQualityScore = 20;
 				console.log('📊 Ocena: SŁABO - tylko zakładka Pokrewne, zalecane usunięcie');
 			}
@@ -5046,7 +5250,7 @@ class AllegroOfferScanner {
 				console.log(`   - Email: ${userEmail}`);
 				console.log(`   - Oryginalny URL: ${originalImageUrl.substring(0, 80)}...`);
 
-				const response = await fetch(apiUrl);
+				const response = await extensionFetch(apiUrl);
 				console.log(`📥 Odpowiedź HTTP (obraz): status ${response.status}`);
 
 				if (!response.ok) {
@@ -5093,7 +5297,7 @@ class AllegroOfferScanner {
 					this.aiImageAnalysis.aiErrors = [];
 				}
 				this.aiImageAnalysis.aiErrors.push(`Błąd analizy AI: ${error.message}`);
-				this.aiImageAnalysis.summary = `⚠️ Wystąpił błąd podczas analizy AI.\n\nW razie problemów skontaktuj się z nami: dominik@vautomate.pl\n\n---\n\n❌ Szczegóły błędu:\n${error.message}`;
+				this.aiImageAnalysis.summary = `⚠️ Wystąpił błąd podczas analizy AI.\n\nW razie problemów skontaktuj się z nami: damian@vautomate.pl\n\n---\n\n❌ Szczegóły błędu:\n${error.message}`;
 			}
 		}
 
@@ -5130,7 +5334,7 @@ class AllegroOfferScanner {
 				console.log(`   - Opis: ${requestData.description.length} znaków`);
 				console.log(`   - API URL: ${authManager.API_URL}`);
 
-				const response = await fetch(AI_API_URL, {
+				const response = await extensionFetch(AI_API_URL, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'text/plain;charset=utf-8',
@@ -5182,7 +5386,7 @@ class AllegroOfferScanner {
 
 			} catch (error) {
 				console.error('❌ Błąd podczas analizy AI opisu:', error);
-				this.descriptionAiAnalysis = `⚠️ Wystąpił błąd podczas analizy AI.\n\nW razie problemów skontaktuj się z nami: dominik@vautomate.pl\n\n---\n\n❌ Szczegóły błędu:\n${error.message}`;
+				this.descriptionAiAnalysis = `⚠️ Wystąpił błąd podczas analizy AI.\n\nW razie problemów skontaktuj się z nami: damian@vautomate.pl\n\n---\n\n❌ Szczegóły błędu:\n${error.message}`;
 			}
 		}
 
@@ -6682,67 +6886,76 @@ class AllegroOfferScanner {
 				'left: 0',
 				'width: 100%',
 				'height: 100%',
-				'background: rgba(0, 0, 0, 0.5)',
+				'background: rgba(0, 0, 0, 0.45)',
 				'z-index: 2147483647',
 				'display: flex',
 				'align-items: center',
 				'justify-content: center',
-				'backdrop-filter: blur(2px)',
+				'backdrop-filter: blur(8px)',
+				'-webkit-backdrop-filter: blur(8px)',
 				'overflow-y: auto',
-				'padding: 20px 0'
+				'padding: 24px 0',
+				'font-family: \'Inter\', system-ui, -apple-system, sans-serif'
 			].join(';');
 
 			// Utwórz dialog
 			const dialog = document.createElement('div');
 			dialog.style.cssText = [
-				'background: white',
-				'border-radius: 12px',
-				'box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3)',
+				'background: #fafafa',
+				'border-radius: 20px',
+				'box-shadow: 0 24px 80px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.05)',
 				'width: 90%',
-				'max-width: 600px',
-				'padding: 24px',
+				'max-width: 560px',
+				'padding: 28px 32px',
 				'position: relative',
 				'animation: slideIn 0.3s ease',
 				'max-height: 90vh',
-				'overflow-y: auto'
+				'overflow-y: auto',
+				'border: 1px solid rgba(0, 0, 0, 0.06)'
 			].join(';');
 
 			// Tytuł
 			const title = document.createElement('h2');
-			title.textContent = '💬 Wyślij feedback';
+			title.textContent = 'Wyślij feedback';
 			title.style.cssText = [
-				'margin: 0 0 16px 0',
-				'font-size: 20px',
+				'margin: 0 0 8px 0',
+				'font-size: 22px',
 				'font-weight: 700',
-				'color: #1f2937'
+				'color: #111827',
+				'letter-spacing: -0.03em',
+				'line-height: 1.3'
 			].join(';');
 
 			// Opis
 			const description = document.createElement('p');
 			description.textContent = 'Oceń poszczególne funkcje wtyczki (opcjonalnie) i/lub napisz swoją opinię:';
 			description.style.cssText = [
-				'margin: 0 0 20px 0',
+				'margin: 0 0 24px 0',
 				'font-size: 14px',
 				'color: #6b7280',
-				'line-height: 1.5'
+				'line-height: 1.55',
+				'letter-spacing: -0.01em'
 			].join(';');
 
 			// Sekcja z ocenami gwiazdkowymi
 			const ratingsSection = document.createElement('div');
 			ratingsSection.style.cssText = [
-				'background: #f9fafb',
-				'border-radius: 8px',
-				'padding: 16px',
-				'margin-bottom: 16px'
+				'background: #ffffff',
+				'border-radius: 12px',
+				'padding: 18px 20px',
+				'margin-bottom: 20px',
+				'border: 1px solid rgba(0, 0, 0, 0.06)',
+				'box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04)'
 			].join(';');
 
 			const ratingsTitle = document.createElement('h3');
-			ratingsTitle.textContent = '⭐ Oceń funkcje (opcjonalnie)';
+			ratingsTitle.textContent = 'Oceń funkcje (opcjonalnie)';
 			ratingsTitle.style.cssText = [
-				'margin: 0 0 12px 0',
-				'font-size: 15px',
+				'margin: 0 0 14px 0',
+				'font-size: 14px',
 				'font-weight: 600',
-				'color: #374151'
+				'color: #374151',
+				'letter-spacing: -0.01em'
 			].join(';');
 
 			ratingsSection.appendChild(ratingsTitle);
@@ -6754,10 +6967,10 @@ class AllegroOfferScanner {
 					'display: flex',
 					'justify-content: space-between',
 					'align-items: center',
-					'margin-bottom: 10px',
-					'padding: 8px',
-					'background: white',
-					'border-radius: 6px'
+					'margin-bottom: 8px',
+					'padding: 10px 12px',
+					'background: #f9fafb',
+					'border-radius: 10px'
 				].join(';');
 
 				const categoryLabel = document.createElement('span');
@@ -6765,7 +6978,9 @@ class AllegroOfferScanner {
 				categoryLabel.style.cssText = [
 					'font-size: 13px',
 					'color: #4b5563',
-					'flex: 1'
+					'flex: 1',
+					'font-weight: 500',
+					'letter-spacing: -0.01em'
 				].join(';');
 
 				const starsContainer = document.createElement('div');
@@ -6839,24 +7054,29 @@ class AllegroOfferScanner {
 			textarea.style.cssText = [
 				'width: 100%',
 				'min-height: 100px',
-				'padding: 12px',
-				'border: 2px solid #e5e7eb',
-				'border-radius: 8px',
+				'padding: 14px 16px',
+				'border: 1px solid #e5e7eb',
+				'border-radius: 12px',
 				'font-size: 14px',
-				'font-family: inherit',
+				'font-family: \'Inter\', system-ui, sans-serif',
 				'resize: vertical',
-				'margin-bottom: 16px',
+				'margin-bottom: 20px',
 				'box-sizing: border-box',
-				'transition: border-color 0.2s'
+				'transition: border-color 0.2s, box-shadow 0.2s',
+				'letter-spacing: -0.01em',
+				'line-height: 1.5',
+				'background: #fff'
 			].join(';');
 
 			textarea.addEventListener('focus', () => {
 				textarea.style.borderColor = '#10b981';
+				textarea.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.15)';
 				textarea.style.outline = 'none';
 			});
 
 			textarea.addEventListener('blur', () => {
 				textarea.style.borderColor = '#e5e7eb';
+				textarea.style.boxShadow = 'none';
 			});
 
 			// Kontener na przyciski
@@ -6872,14 +7092,16 @@ class AllegroOfferScanner {
 			cancelBtn.textContent = 'Anuluj';
 			cancelBtn.style.cssText = [
 				'padding: 10px 20px',
-				'border: 2px solid #e5e7eb',
-				'border-radius: 8px',
-				'background: white',
+				'border: 1px solid #e5e7eb',
+				'border-radius: 10px',
+				'background: #fff',
 				'color: #6b7280',
 				'font-size: 14px',
 				'font-weight: 600',
 				'cursor: pointer',
-				'transition: all 0.2s'
+				'transition: all 0.2s',
+				'letter-spacing: -0.01em',
+				'font-family: inherit'
 			].join(';');
 
 			cancelBtn.addEventListener('mouseenter', () => {
@@ -6898,23 +7120,28 @@ class AllegroOfferScanner {
 			const sendBtn = document.createElement('button');
 			sendBtn.textContent = '📤 Wyślij';
 			sendBtn.style.cssText = [
-				'padding: 10px 20px',
+				'padding: 10px 22px',
 				'border: none',
-				'border-radius: 8px',
-				'background: #10b981',
+				'border-radius: 10px',
+				'background: #059669',
 				'color: white',
 				'font-size: 14px',
 				'font-weight: 600',
 				'cursor: pointer',
-				'transition: all 0.2s'
+				'transition: all 0.2s',
+				'letter-spacing: -0.01em',
+				'font-family: inherit',
+				'box-shadow: 0 1px 3px rgba(5, 150, 105, 0.25)'
 			].join(';');
 
 			sendBtn.addEventListener('mouseenter', () => {
-				sendBtn.style.background = '#059669';
+				sendBtn.style.background = '#047857';
+				sendBtn.style.boxShadow = '0 2px 6px rgba(5, 150, 105, 0.35)';
 			});
 
 			sendBtn.addEventListener('mouseleave', () => {
-				sendBtn.style.background = '#10b981';
+				sendBtn.style.background = '#059669';
+				sendBtn.style.boxShadow = '0 1px 3px rgba(5, 150, 105, 0.25)';
 			});
 
 			sendBtn.addEventListener('click', async () => {
@@ -7058,13 +7285,19 @@ class AllegroOfferScanner {
 				'top: 50%',
 				'left: 50%',
 				'transform: translate(-50%, -50%)',
-				'background: rgba(0,0,0,0.9)',
-				'color: white',
-				'padding: 30px 50px',
-				'border-radius: 12px',
+				'background: rgba(30, 30, 30, 0.95)',
+				'color: #fff',
+				'padding: 28px 44px',
+				'border-radius: 16px',
 				'z-index: 2147483648',
-				'font-size: 18px',
-				'font-weight: 600'
+				'font-family: \'Inter\', system-ui, -apple-system, sans-serif',
+				'font-size: 16px',
+				'font-weight: 600',
+				'letter-spacing: -0.02em',
+				'line-height: 1.4',
+				'box-shadow: 0 24px 48px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.06)',
+				'backdrop-filter: blur(12px)',
+				'-webkit-backdrop-filter: blur(12px)'
 			].join(';');
 			loadingMsg.textContent = '⏳ Zbieram dane do raportu...';
 			document.body.appendChild(loadingMsg);
@@ -7173,12 +7406,14 @@ class AllegroOfferScanner {
 			<meta charset="utf-8" />
 			<title>${fileName}</title>
 			<meta name="filename" content="${fileName}" />
+			<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
 			<style>
 				body { 
-					font-family: 'Segoe UI', Tahoma, Arial, sans-serif; 
-					color:#111827; 
+					font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif; 
+					color: #111827; 
 					margin: 32px;
 					line-height: 1.6;
+					letter-spacing: -0.01em;
 					-webkit-print-color-adjust: exact;
 					print-color-adjust: exact;
 					-webkit-user-select: text;
@@ -7188,6 +7423,7 @@ class AllegroOfferScanner {
 					font-size: 24px; 
 					margin: 0 0 8px;
 					color: #1f2937;
+					letter-spacing: -0.02em;
 				}
 				.header { 
 					margin-bottom: 24px;
@@ -7204,37 +7440,45 @@ class AllegroOfferScanner {
 					margin-bottom: 24px;
 				}
 				.section-title {
-					font-size: 18px;
+					font-size: 17px;
 					font-weight: 600;
-					color: #374151;
+					color: #111827;
 					margin-bottom: 12px;
-					padding: 8px;
+					padding: 10px 14px;
 					background: #f9fafb;
 					border-left: 4px solid #ff5a00;
+					border-radius: 0 8px 8px 0;
+					letter-spacing: -0.02em;
 				}
 				.card { 
 					border: 1px solid #e5e7eb; 
-					border-radius: 8px; 
-					padding: 16px;
+					border-radius: 12px; 
+					padding: 18px 20px;
 					background: #ffffff;
+					box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 				}
 				.row { 
 					display: flex; 
 					justify-content: space-between; 
+					align-items: center;
 					margin-bottom: 12px;
-					padding: 8px 0;
-					border-bottom: 1px dashed #e5e7eb;
+					padding: 10px 0;
+					border-bottom: 1px solid #f3f4f6;
 				}
 				.row:last-child {
 					border-bottom: none;
 				}
 				.label { 
-					color:#6b7280;
+					color: #6b7280;
 					font-weight: 500;
+					font-size: 14px;
+					letter-spacing: -0.01em;
 				}
 				.value { 
-					font-weight: 700;
+					font-weight: 600;
 					color: #111827;
+					font-size: 14px;
+					letter-spacing: -0.01em;
 				}
 				.names-grid {
 					display: grid;
@@ -7841,29 +8085,29 @@ class AllegroOfferScanner {
 				<div class="section">
 					<div class="section-title">💡 Propozycje dla Ciebie</div>
 					${!this.suggestionsSection || !this.suggestionsSection.exists ? `
-					<div class="card" style="background:#fff7ed; border:2px solid #fb923c;">
+					<div class="card" style="background:#fff7ed; border:1px solid #fdba74; border-radius:12px;">
 						<div class="row">
-							<div class="label" style="color:#9a3412; font-weight:700;">Status:</div>
-							<div class="value" style="color:#fb923c; font-weight:700;">⚠️ BRAK</div>
+							<div class="label" style="color:#9a3412; font-weight:600;">Status:</div>
+							<div class="value" style="color:#ea580c; font-weight:600;">⚠️ BRAK</div>
 						</div>
-						<div style="margin-top:12px; padding:12px; background:#ffedd5; border-radius:6px; color:#7c2d12; font-size:13px; line-height:1.6;">
+						<div style="margin-top:14px; padding:14px 16px; background:#ffedd5; border-radius:10px; color:#7c2d12; font-size:14px; line-height:1.55; letter-spacing:-0.01em;">
 							<strong>Brak sekcji "Propozycje dla Ciebie"!</strong><br>
 							${this.suggestionsSection?.recommendation || 'Sprawdź czy sekcja jest dostępna na stronie produktu.'}
 						</div>
 					</div>
 					` : `
-					<div class="card" style="border:2px solid ${this.suggestionsSection.qualityColor}; background:${this.suggestionsSection.hasBrandTab ? '#f0fdf4' : '#fff7ed'};">
+					<div class="card" style="border:1px solid ${this.suggestionsSection.qualityColor}; background:${this.suggestionsSection.hasBrandTab ? '#f0fdf4' : '#fff7ed'}; border-radius:12px;">
 						<div class="row">
 							<div class="label">Ma zakładkę z marką:</div>
-							<div class="value" style="font-weight:700;">${this.suggestionsSection.hasBrandTab ? `✅ TAK${this.suggestionsSection.brandName ? ` (${escapeHtml(this.suggestionsSection.brandName)})` : ''}` : '❌ NIE'}</div>
+							<div class="value" style="font-weight:600;">${this.suggestionsSection.hasBrandTab ? `✅ TAK${this.suggestionsSection.brandName ? ` (${escapeHtml(this.suggestionsSection.brandName)})` : ''}` : '❌ NIE'}</div>
 						</div>
 
 						<div class="row">
 							<div class="label">Ocena:</div>
-							<div class="value" style="font-weight:700; color:${this.suggestionsSection.qualityColor};">${this.suggestionsSection.qualityRating}</div>
+							<div class="value" style="font-weight:600; color:${this.suggestionsSection.qualityColor};">${this.suggestionsSection.qualityRating}</div>
 						</div>
 						${this.suggestionsSection.recommendation ? `
-						<div style="margin-top:12px; padding:12px; background:${this.suggestionsSection.hasBrandTab ? '#ecfdf5' : this.suggestionsQualityScore >= 50 ? '#ffedd5' : '#fee2e2'}; border-radius:6px; border-left:3px solid ${this.suggestionsSection.qualityColor}; color:#374151; font-size:13px; line-height:1.6;">
+						<div style="margin-top:14px; padding:14px 16px; background:${this.suggestionsSection.hasBrandTab ? '#ecfdf5' : this.suggestionsQualityScore >= 50 ? '#ffedd5' : '#fee2e2'}; border-radius:10px; border-left:4px solid ${this.suggestionsSection.qualityColor}; color:#374151; font-size:14px; line-height:1.55; letter-spacing:-0.01em;">
 							💡 <strong>Rekomendacja:</strong> ${escapeHtml(this.suggestionsSection.recommendation)}
 						</div>
 						` : ''}
@@ -7924,24 +8168,22 @@ class AllegroOfferScanner {
 							🤖 Podsumowanie analizy opisu z AI
 							<span style="font-size:11px; color:#6b7280; font-weight:400;">(tokeny: ${this.descriptionAiTokensUsed})</span>
 						</div>
-					${this.descriptionAiAnalysis && (this.descriptionAiAnalysis.includes('⚠️ Wystąpił błąd') || this.descriptionAiAnalysis.includes('❌ Błąd') || this.descriptionAiAnalysis.includes('⚠️')) ? `
+					${this.descriptionAiAnalysis && (this.descriptionAiAnalysis.includes('⚠️ Wystąpił błąd') || this.descriptionAiAnalysis.includes('❌ Błąd')) ? `
 						<div style="background:#fee2e2; border:2px solid #dc2626; border-radius:6px; padding:16px;">
 							<div style="font-weight:700; color:#991b1b; margin-bottom:8px; font-size:14px;">⚠️ Wystąpił błąd podczas analizy AI</div>
 							<div style="color:#7f1d1d; font-size:13px; line-height:1.6; margin-bottom:12px;">
 								W razie problemów skontaktuj się z nami:<br>
-								<a href="mailto:dominik@vautomate.pl" style="color:#dc2626; font-weight:600; text-decoration:underline;">dominik@vautomate.pl</a>
+								<a href="mailto:damian@vautomate.pl" style="color:#dc2626; font-weight:600; text-decoration:underline;">damian@vautomate.pl</a>
 							</div>
 							<div style="border-top:1px solid #fca5a5; padding-top:12px; margin-top:12px;">
 								<div style="font-weight:600; color:#991b1b; margin-bottom:6px; font-size:12px;">Szczegóły błędu:</div>
 								<div style="color:#6b7280; font-size:12px; font-family:monospace; background:#fef2f2; padding:8px; border-radius:4px; white-space:pre-wrap;">
-									${typeof this.descriptionAiAnalysis === 'string' ? escapeHtml(this.descriptionAiAnalysis.replace(/⚠️ Wystąpił błąd podczas analizy AI\.\n\nW razie problemów skontaktuj się z nami: dominik@vautomate\.pl\n\n---\n\n❌ Szczegóły błędu:\n/, '').replace(/❌ Błąd połączenia: /, '')) : ''}
+									${typeof this.descriptionAiAnalysis === 'string' ? escapeHtml(this.descriptionAiAnalysis.replace(/⚠️ Wystąpił błąd podczas analizy AI\.\n\nW razie problemów skontaktuj się z nami: damian@vautomate\.pl\n\n---\n\n❌ Szczegóły błędu:\n/, '').replace(/❌ Błąd połączenia: /, '')) : ''}
 								</div>
 							</div>
 						</div>
 					` : `
-						<div style="color:#374151; line-height:1.8; white-space:pre-wrap; font-size:13px;">
-							${escapeHtml(this.descriptionAiAnalysis)}
-						</div>
+						<div style="color:#374151; line-height:1.8; white-space:pre-wrap; font-size:13px; padding-left:0; text-indent:0;">${escapeHtml(normalizeAiText(this.descriptionAiAnalysis))}</div>
 					`}
 					</div>
 					` : ''}
@@ -8250,18 +8492,18 @@ class AllegroOfferScanner {
 										<div style="font-weight:700; color:#991b1b; margin-bottom:8px; font-size:14px;">⚠️ Wystąpił błąd podczas analizy AI</div>
 										<div style="color:#7f1d1d; font-size:13px; line-height:1.6; margin-bottom:12px;">
 											W razie problemów skontaktuj się z nami:<br>
-											<a href="mailto:dominik@vautomate.pl" style="color:#dc2626; font-weight:600; text-decoration:underline;">dominik@vautomate.pl</a>
+											<a href="mailto:damian@vautomate.pl" style="color:#dc2626; font-weight:600; text-decoration:underline;">damian@vautomate.pl</a>
 										</div>
 										<div style="border-top:1px solid #fca5a5; padding-top:12px; margin-top:12px;">
 											<div style="font-weight:600; color:#991b1b; margin-bottom:6px; font-size:12px;">Szczegóły błędu:</div>
 											<div style="color:#6b7280; font-size:12px; font-family:monospace; background:#fef2f2; padding:8px; border-radius:4px; white-space:pre-wrap;">
-												${typeof this.aiImageAnalysis.summary === 'string' ? escapeHtml(this.aiImageAnalysis.summary.replace(/⚠️ Wystąpił błąd podczas analizy AI\.\n\nW razie problemów skontaktuj się z nami: dominik@vautomate\.pl\n\n---\n\n❌ Szczegóły błędu:\n/, '').replace(/❌ Błąd połączenia: /, '')) : ''}
+												${typeof this.aiImageAnalysis.summary === 'string' ? escapeHtml(this.aiImageAnalysis.summary.replace(/⚠️ Wystąpił błąd podczas analizy AI\.\n\nW razie problemów skontaktuj się z nami: damian@vautomate\.pl\n\n---\n\n❌ Szczegóły błędu:\n/, '').replace(/❌ Błąd połączenia: /, '')) : ''}
 											</div>
 										</div>
 									</div>
 								` : `
 									<div style="padding: 12px; background: #f8fafc; border-radius: 6px; margin-bottom: 16px; font-size: 14px; color: #475569; line-height: 1.6;">
-										<strong>Podsumowanie:</strong> ${escapeHtml(this.aiImageAnalysis.summary)}
+										<strong>Podsumowanie:</strong> ${escapeHtml(normalizeAiText(this.aiImageAnalysis.summary))}
 									</div>
 								`}
 							` : ''}
@@ -8342,7 +8584,7 @@ class AllegroOfferScanner {
 								<ul style="margin: 8px 0 0 20px; padding: 0;">
 									<li>Sprawdź czy miniatura produktu jest dostępna</li>
 									<li>Spróbuj ponownie za chwilę</li>
-									<li>Skontaktuj się z nami: <a href="mailto:dominik@vautomate.pl" style="color: #dc2626; text-decoration: underline;">dominik@vautomate.pl</a></li>
+									<li>Skontaktuj się z nami: <a href="mailto:damian@vautomate.pl" style="color: #dc2626; text-decoration: underline;">damian@vautomate.pl</a></li>
 								</ul>
 							</div>
 						</div>
@@ -8354,7 +8596,7 @@ class AllegroOfferScanner {
 								<div style="font-size: 12px; color: #991b1b; font-weight: 600; margin-bottom: 4px;">📧 Potrzebujesz pomocy?</div>
 								<div style="font-size: 11px; color: #7f1d1d; line-height: 1.5; margin-bottom: 8px;">
 									W razie problemów skontaktuj się z nami:<br>
-									<a href="mailto:dominik@vautomate.pl" style="color: #dc2626; font-weight: 600; text-decoration: underline;">dominik@vautomate.pl</a><br>
+									<a href="mailto:damian@vautomate.pl" style="color: #dc2626; font-weight: 600; text-decoration: underline;">damian@vautomate.pl</a><br>
 									<span style="font-size: 10px; color: #991b1b; font-style: italic;">⚡ Prześlij nam kod błędu poniżej - to ważne aby szybko zareagować!</span>
 								</div>
 							</div>
@@ -8449,42 +8691,7 @@ class AllegroOfferScanner {
 					</button>
 				</div>
 				
-				<script>
-				function setFileNameAndPrint() {
-					// Próbuj ustawić nazwę pliku przed drukowaniem
-					try {
-						// Metoda 1: Ustawienie nazwy w iframe (dla niektórych przeglądarek)
-						if (window.parent && window.parent !== window) {
-							window.parent.postMessage({
-								type: 'setFileName',
-								fileName: '${fileName}'
-							}, '*');
-						}
-						
-						// Metoda 2: Ustawienie nazwy w document.title
-						document.title = '${fileName}';
-						
-						// Metoda 3: Dodanie meta tag
-						let meta = document.querySelector('meta[name="filename"]');
-						if (!meta) {
-							meta = document.createElement('meta');
-							meta.name = 'filename';
-							document.head.appendChild(meta);
-						}
-						meta.content = '${fileName}';
-						
-						console.log('✅ Ustawiono nazwę pliku:', '${fileName}');
-					} catch (error) {
-						console.log('⚠️ Nie udało się ustawić nazwy pliku:', error.message);
-					}
-					
-					// Uruchom drukowanie
-					setTimeout(() => {
-						window.print();
-					}, 100);
-				}
-				</script>
-				
+				<!-- Bez inline script – CSP Allegro blokuje; tytuł i print() wywołuje rodzic po załadowaniu iframe -->
 				<style>
 					@media print {
 						* {
@@ -8545,12 +8752,9 @@ class AllegroOfferScanner {
 					window.addEventListener('afterprint', cleanup, { once: true });
 					setTimeout(() => {
 						try {
-							if (typeof w.setFileNameAndPrint === 'function') {
-								w.setFileNameAndPrint();
-							} else {
-								w.focus();
-								w.print();
-							}
+							try { w.document.title = fileName; } catch (_) {}
+							w.focus();
+							w.print();
 						} catch (e) {
 							try {
 								const nw = window.open('', '_blank');
@@ -9087,37 +9291,37 @@ class AllegroOfferScanner {
 				</div>
 
 				<div style="margin-bottom:24px;">
-					<div style="font-size:18px; font-weight:600; color:#374151; margin-bottom:12px; padding:8px; background:#f9fafb; border-left:4px solid #ff5a00;">
+					<div style="font-size:17px; font-weight:600; color:#111827; margin-bottom:12px; padding:10px 14px; background:#f9fafb; border-left:4px solid #ff5a00; border-radius:0 8px 8px 0; letter-spacing:-0.02em;">
 						💡 Propozycje dla Ciebie
 					</div>
 					${!this.suggestionsSection || !this.suggestionsSection.exists ? `
-					<div style="border:2px solid #fb923c; border-radius:8px; padding:16px; background:#fff7ed;">
-						<div style="display:flex; justify-content:space-between; margin-bottom:12px; padding:8px 0; border-bottom:1px dashed #fb923c;">
-							<div style="color:#9a3412; font-weight:700;">Status:</div>
-							<div style="font-weight:700; color:#fb923c;">⚠️ BRAK SEKCJI</div>
+					<div style="border:1px solid #fdba74; border-radius:12px; padding:18px 20px; background:#fff7ed;">
+						<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:10px 0; border-bottom:1px solid #fed7aa;">
+							<div style="color:#9a3412; font-weight:600;">Status:</div>
+							<div style="font-weight:600; color:#ea580c;">⚠️ BRAK SEKCJI</div>
 						</div>
-						<div style="padding:12px; background:#ffedd5; border-radius:6px; color:#7c2d12; font-size:13px; line-height:1.6;">
+						<div style="padding:14px 16px; background:#ffedd5; border-radius:10px; color:#7c2d12; font-size:14px; line-height:1.55; letter-spacing:-0.01em;">
 							<strong>Brak sekcji "Propozycje dla Ciebie"!</strong><br>
 							${this.suggestionsSection?.recommendation || 'Sprawdź czy sekcja jest dostępna na stronie produktu.'}
 						</div>
 					</div>
 					` : `
-					<div style="border:2px solid ${this.suggestionsSection.qualityColor}; border-radius:8px; padding:16px; background:${this.suggestionsSection.hasBrandTab ? '#f0fdf4' : '#fff7ed'};">
+					<div style="border:1px solid ${this.suggestionsSection.qualityColor}; border-radius:12px; padding:18px 20px; background:${this.suggestionsSection.hasBrandTab ? '#f0fdf4' : '#fff7ed'};">
 						<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-							<div style="font-size:16px; font-weight:700; color:#374151;">
+							<div style="font-size:15px; font-weight:600; color:#111827; letter-spacing:-0.01em;">
 								Sekcja "Propozycje dla Ciebie"
 							</div>
-							<div style="font-size:12px; font-weight:700; padding:6px 12px; border-radius:6px; white-space:nowrap; ${this.suggestionsSection.hasBrandTab ? 'background:#10b981; color:white; border:1px solid #059669;' : 'background:#fb923c; color:white; border:1px solid #ea580c;'}">
+							<div style="font-size:12px; font-weight:600; padding:6px 12px; border-radius:8px; white-space:nowrap; ${this.suggestionsSection.hasBrandTab ? 'background:#059669; color:white;' : 'background:#ea580c; color:white;'}">
 								${this.suggestionsSection.qualityRating}
 							</div>
 						</div>
-						<div style="display:flex; justify-content:space-between; margin-bottom:12px; padding:8px 0; border-bottom:1px dashed #e5e7eb;">
-							<div style="color:#6b7280;">Ma zakładkę z marką:</div>
-							<div style="font-weight:700;">${this.suggestionsSection.hasBrandTab ? `✅ TAK${this.suggestionsSection.brandName ? ` (${escapeHtml(this.suggestionsSection.brandName)})` : ''}` : '❌ NIE'}</div>
+						<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:10px 0; border-bottom:1px solid #f3f4f6;">
+							<div style="color:#6b7280; font-weight:500;">Ma zakładkę z marką:</div>
+							<div style="font-weight:600;">${this.suggestionsSection.hasBrandTab ? `✅ TAK${this.suggestionsSection.brandName ? ` (${escapeHtml(this.suggestionsSection.brandName)})` : ''}` : '❌ NIE'}</div>
 						</div>
 
 						${this.suggestionsSection.recommendation ? `
-						<div style="padding:12px; background:${this.suggestionsSection.hasBrandTab ? '#ecfdf5' : '#ffedd5'}; border-radius:6px; border-left:3px solid ${this.suggestionsSection.qualityColor}; color:#374151; font-size:13px; line-height:1.6;">
+						<div style="padding:14px 16px; background:${this.suggestionsSection.hasBrandTab ? '#ecfdf5' : '#ffedd5'}; border-radius:10px; border-left:4px solid ${this.suggestionsSection.qualityColor}; color:#374151; font-size:14px; line-height:1.55; letter-spacing:-0.01em;">
 							💡 <strong>Rekomendacja:</strong> ${escapeHtml(this.suggestionsSection.recommendation)}
 						</div>
 						` : ''}
@@ -9253,19 +9457,17 @@ class AllegroOfferScanner {
 							<div style="font-weight:700; color:#991b1b; margin-bottom:8px; font-size:14px;">⚠️ Wystąpił błąd podczas analizy AI</div>
 							<div style="color:#7f1d1d; font-size:13px; line-height:1.6; margin-bottom:12px;">
 								W razie problemów skontaktuj się z nami:<br>
-								<a href="mailto:dominik@vautomate.pl" style="color:#dc2626; font-weight:600; text-decoration:underline;">dominik@vautomate.pl</a>
+								<a href="mailto:damian@vautomate.pl" style="color:#dc2626; font-weight:600; text-decoration:underline;">damian@vautomate.pl</a>
 							</div>
 							<div style="border-top:1px solid #fca5a5; padding-top:12px; margin-top:12px;">
 								<div style="font-weight:600; color:#991b1b; margin-bottom:6px; font-size:12px;">Szczegóły błędu:</div>
 								<div style="color:#6b7280; font-size:12px; font-family:monospace; background:#fef2f2; padding:8px; border-radius:4px; white-space:pre-wrap;">
-									${escapeHtml(this.descriptionAiAnalysis.replace(/⚠️ Wystąpił błąd podczas analizy AI\.\n\nW razie problemów skontaktuj się z nami: dominik@vautomate\.pl\n\n---\n\n❌ Szczegóły błędu:\n/, '').replace(/❌ Błąd połączenia: /, ''))}
+									${escapeHtml(this.descriptionAiAnalysis.replace(/⚠️ Wystąpił błąd podczas analizy AI\.\n\nW razie problemów skontaktuj się z nami: damian@vautomate\.pl\n\n---\n\n❌ Szczegóły błędu:\n/, '').replace(/❌ Błąd połączenia: /, ''))}
 								</div>
 							</div>
 						</div>
 					` : `
-						<div style="color:#374151; line-height:1.8; white-space:pre-wrap; font-size:13px;">
-							${escapeHtml(this.descriptionAiAnalysis)}
-						</div>
+						<div style="color:#374151; line-height:1.8; white-space:pre-wrap; font-size:13px; padding-left:0; text-indent:0;">${escapeHtml(normalizeAiText(this.descriptionAiAnalysis))}</div>
 					`}
 					</div>
 					` : ''}
@@ -9524,6 +9726,14 @@ class AllegroOfferScanner {
 			.replace(/>/g, '&gt;')
 			.replace(/"/g, '&quot;')
 			.replace(/'/g, '&#039;');
+	}
+
+	/** Usuwa wcięcia na początku każdej linii (spacje, taby, nbsp, em-space itd.) */
+	function normalizeAiText(text) {
+		if (!text || typeof text !== 'string') return '';
+		return text.trim().split('\n').map(function (l) {
+			return l.replace(/^[\s\u00A0\u2000-\u200B\u202F\u205F\u3000]+/, '');
+		}).join('\n');
 	}
 
 	// Uruchom po załadowaniu
