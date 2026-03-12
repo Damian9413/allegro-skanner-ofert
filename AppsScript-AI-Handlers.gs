@@ -44,13 +44,15 @@ function handleAnalyzeImage(params) {
     "- Nazwa modelu/parametry produktu na grafice (np. \"Pancerny 4,7\", \"16GB+128GB\", \"Android 15\") = DOZWOLONE (promotionalText.detected = false).\n" +
     "- NIEDOZWOLONE teksty promocyjne: \"-10%\", \"-50%\", \"PROMOCJA\", \"NOWOŚĆ\", \"BESTSELLER\", \"GRATIS\", \"TANIEJ\" (promotionalText.detected = true).\n" +
     "- Akcesoria w zestawie (słuchawki, ładowarka) = DOZWOLONE (extraElements.detected = false jeśli to część zestawu).\n" +
-    "- Ręka trzymająca produkt = DOZWOLONE.";
+    "- Ręka trzymająca produkt = DOZWOLONE.\n" +
+    "- ETYKIETA PRODUKTU (np. nadruk z nazwą, wagą, pojemnością, kodem kreskowym, składem, instrukcją na opakowaniu) = DOZWOLONE – to integralna część produktu, NIE jest 'dodatkowym elementem graficznym'. Ustaw extraElements.detected = false i details = 'Etykieta produktu – dozwolone'.\n" +
+    "- extraElements.detected = true TYLKO gdy na zdjęciu są ZEWNĘTRZNE elementy graficzne nałożone przez sprzedawcę: banery, ramki, strzałki wskazujące na cechy, naklejki reklamowe – czyli elementy NIENALEŻĄCE do samego produktu.";
 
   var userPrompt = "Oceń to zdjęcie pod kątem standardów miniatury Allegro.\n" +
     "1. Czy tło jest w większości białe?\n" +
     "2. Czy produkt zajmuje odpowiednią część kadru?\n" +
-    "3. DOZWOLONE: logo marki produktu, nazwa modelu, parametry techniczne, akcesoria w zestawie.\n" +
-    "4. NIEDOZWOLONE: znaki wodne, teksty promocyjne (-50%, PROMOCJA, TANIEJ), cudze loga (nie producenta).\n" +
+    "3. DOZWOLONE: logo marki produktu, nazwa modelu, parametry techniczne, akcesoria w zestawie, etykieta produktu (nadruk z nazwą/wagą/składem/kodem kreskowym na opakowaniu).\n" +
+    "4. NIEDOZWOLONE: znaki wodne, teksty promocyjne (-50%, PROMOCJA, TANIEJ), cudze loga (nie producenta), nałożone banery/ramki/strzałki reklamowe.\n" +
     "5. WYMAGANE: Oceń ostrość (visualQuality.sharpness: score 0-100 i assessment) i profesjonalność tła (visualQuality.background: score 0-100 i assessment).\n\n" +
     "Zwróć odpowiedź TYLKO w formacie JSON (wszystkie pola obowiązkowe):\n" +
     "{\n" +
