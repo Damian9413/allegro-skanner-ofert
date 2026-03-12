@@ -1,0 +1,27 @@
+{
+  "name": "allegro-skanner-ofert",
+  "version": "3.6.0",
+  "description": "Rozszerzenie Chrome do skanowania i analizy ofert Allegro",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "html2pdf.js": "^0.10.2"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "vite": "^5.4.11",
+    "vite-plugin-web-extension": "^4.1.6"
+  },
+  "keywords": [
+    "chrome-extension",
+    "allegro",
+    "scanner",
+    "e-commerce"
+  ],
+  "author": "Damian",
+  "license": "MIT"
+}

@@ -1,23 +1,40 @@
+# Dependencies
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Build
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+config.php
+
 # macOS
 .DS_Store
 .AppleDouble
 .LSOverride
 
-# Archiwa
-*.zip
-
-# IDE / Editor
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# Logi i cache
+# Logs
 *.log
 .cache/
 
-# Zmienne środowiskowe (jeśli kiedyś dodasz)
-.env
-.env.local
-.env.*.local
+# Chrome Extension
+*.crx
+*.pem
+chrome-extension.zip
+
+# Temporary
+tmp/
+temp/
