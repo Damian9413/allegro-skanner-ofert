@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Allegro Skan Ofert - Wersja Zintegrowana",
   "version": "3.7.8",
-  "description": "Skanuje oferty Allegro z autoryzacj\u0105 i limitem raport\u00f3w przez Google Sheets API",
+  "description": "Skanuje oferty Allegro z autoryzacją i limitem raportów przez Google Sheets API",
   "permissions": [
     "storage",
     "activeTab"
@@ -12,13 +12,8 @@
     "https://*.allegro.pl/*",
     "https://script.google.com/*",
     "https://dajstrone.pl/*",
-    "https://unpkg.com/*",
-    "https://fonts.googleapis.com/*",
-    "https://fonts.gstatic.com/*"
+    "https://unpkg.com/*"
   ],
-  "background": {
-    "service_worker": "background.js"
-  },
   "content_scripts": [
     {
       "matches": [
