@@ -5816,15 +5816,17 @@ class AllegroOfferScanner {
 				}
 			}
 
-			if (!parametersTable) {
-				// ZMIANA: Szukaj całej tabeli, nie tylko jednego tbody
-				const tempTable = document.querySelector('table.myre_zn');
-				// Sprawdź czy to faktycznie tabela parametrów (ma kolumny z klasami _3c6dd)
-				if (tempTable && (tempTable.querySelector('tr td._3c6dd_ipdVK') || tempTable.querySelector('tr td._3c6dd_SpQem'))) {
+		if (!parametersTable) {
+			const tempTable = document.querySelector('table.myre_zn');
+			if (tempTable) {
+				const hasOldClasses = tempTable.querySelector('tr td._3c6dd_ipdVK') || tempTable.querySelector('tr td._3c6dd_SpQem');
+				const hasDataRows = Array.from(tempTable.querySelectorAll('tr')).some(r => r.querySelectorAll('td').length >= 2);
+				if (hasOldClasses || hasDataRows) {
 					parametersTable = tempTable;
-					console.log('✅ [SEQ] Znaleziono tabelę parametrów po klasach CSS (table.myre_zn)');
+					console.log(`✅ [SEQ] Znaleziono tabelę parametrów (klasy=${!!hasOldClasses}, fallback=${!hasOldClasses && !!hasDataRows})`);
 				}
 			}
+		}
 
 			if (parametersTable) {
 				console.log('✅ [SEQ] Znaleziono tabelę parametrów w performSequentialScan');
@@ -5841,31 +5843,33 @@ class AllegroOfferScanner {
 						return;
 					}
 
-					const nameCell = row.querySelector('td._3c6dd_ipdVK') || row.querySelector('td._3c6dd_SpQem');
-					const valueCell = row.querySelector('td._3c6dd_AYKa3');
+				// Próbujemy po klasach CSS (mogą się zmienić), fallback: pozycja td w wierszu
+				const tds = row.querySelectorAll('td');
+				const nameCell = row.querySelector('td._3c6dd_ipdVK') || row.querySelector('td._3c6dd_SpQem') || (tds.length >= 2 ? tds[0] : null);
+				const valueCell = row.querySelector('td._3c6dd_AYKa3') || (tds.length >= 2 ? tds[1] : null);
 
-					if (nameCell && valueCell) {
-						const paramName = nameCell.textContent.trim();
-						let paramValue = '';
-						let paramLink = '';
+				if (nameCell && valueCell && nameCell !== valueCell) {
+					const paramName = nameCell.textContent.trim();
+					let paramValue = '';
+					let paramLink = '';
 
-						console.log(`   📋 [SEQ] Wiersz ${index + 1}: "${paramName}"`);
+					console.log(`   📋 [SEQ] Wiersz ${index + 1}: "${paramName}"`);
 
-						const valueLink = valueCell.querySelector('a');
-						if (valueLink) {
-							paramValue = valueLink.textContent.trim();
-							paramLink = valueLink.href;
-							console.log(`      → [SEQ] Wartość z linkiem: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
+					const valueLink = valueCell.querySelector('a');
+					if (valueLink) {
+						paramValue = valueLink.textContent.trim();
+						paramLink = valueLink.href;
+						console.log(`      → [SEQ] Wartość z linkiem: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
+					} else {
+						const valueDiv = valueCell.querySelector('div._3c6dd_KEYaD') || valueCell.querySelector('div');
+						if (valueDiv) {
+							paramValue = valueDiv.textContent.trim();
+							console.log(`      → [SEQ] Wartość z div: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
 						} else {
-							const valueDiv = valueCell.querySelector('div._3c6dd_KEYaD');
-							if (valueDiv) {
-								paramValue = valueDiv.textContent.trim();
-								console.log(`      → [SEQ] Wartość z div: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
-							} else {
-								paramValue = valueCell.textContent.trim();
-								console.log(`      → [SEQ] Wartość z td: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
-							}
+							paramValue = valueCell.textContent.trim();
+							console.log(`      → [SEQ] Wartość z td: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
 						}
+					}
 
 						// CZYSZCZENIE: Dla parametru "Stan" = "Nowy" odetnij wyjaśnienie
 						if (paramName.toLowerCase() === 'stan' && paramValue.startsWith('Nowy')) {
@@ -6426,20 +6430,24 @@ class AllegroOfferScanner {
 				}
 			}
 
-			// METODA 3: Szukanie tabeli parametrów po klasach CSS
-			if (!parametersTable) {
-				console.log('🔍 METODA 3: Szukam table.myre_zn...');
-				const tempTable = document.querySelector('table.myre_zn');
-				// Sprawdź czy to faktycznie tabela parametrów (ma kolumny z klasami _3c6dd)
-				if (tempTable && (tempTable.querySelector('tr td._3c6dd_ipdVK') || tempTable.querySelector('tr td._3c6dd_SpQem'))) {
+		// METODA 3: Szukanie tabeli parametrów po klasach CSS lub strukturze (≥2 td per row)
+		if (!parametersTable) {
+			console.log('🔍 METODA 3: Szukam table.myre_zn...');
+			const tempTable = document.querySelector('table.myre_zn');
+			if (tempTable) {
+				// Akceptujemy tabelę jeśli ma klasy _3c6dd LUB ma wiersze z ≥2 komórkami td
+				const hasOldClasses = tempTable.querySelector('tr td._3c6dd_ipdVK') || tempTable.querySelector('tr td._3c6dd_SpQem');
+				const hasDataRows = tempTable.querySelectorAll('tr').length > 0 && Array.from(tempTable.querySelectorAll('tr')).some(r => r.querySelectorAll('td').length >= 2);
+				if (hasOldClasses || hasDataRows) {
 					parametersTable = tempTable;
-					console.log('✅ Znaleziono tabelę parametrów po klasach CSS (table.myre_zn)');
-				} else if (tempTable) {
-					console.log('⚠️ Znaleziono table.myre_zn, ale nie ma kolumn parametrów (_3c6dd_ipdVK lub _3c6dd_SpQem)');
+					console.log(`✅ Znaleziono tabelę parametrów (table.myre_zn, klasy=${!!hasOldClasses}, fallback=${!hasOldClasses && !!hasDataRows})`);
 				} else {
-					console.log('⚠️ Nie znaleziono table.myre_zn');
+					console.log('⚠️ Znaleziono table.myre_zn, ale brak wierszy z danymi');
 				}
+			} else {
+				console.log('⚠️ Nie znaleziono table.myre_zn');
 			}
+		}
 
 			if (!parametersTable) {
 				console.log('❌ Nie znaleziono tabeli parametrów');
@@ -6464,34 +6472,34 @@ class AllegroOfferScanner {
 					return;
 				}
 
-				// Alternatywne selektory dla komórki nazwy (różne wersje Allegro)
-				const nameCell = row.querySelector('td._3c6dd_ipdVK') || row.querySelector('td._3c6dd_SpQem');
-				const valueCell = row.querySelector('td._3c6dd_AYKa3');
+			// Próbujemy po klasach CSS (mogą się zmienić), fallback: pozycja td w wierszu
+			const tds2 = row.querySelectorAll('td');
+			const nameCell = row.querySelector('td._3c6dd_ipdVK') || row.querySelector('td._3c6dd_SpQem') || (tds2.length >= 2 ? tds2[0] : null);
+			const valueCell = row.querySelector('td._3c6dd_AYKa3') || (tds2.length >= 2 ? tds2[1] : null);
 
-				if (nameCell && valueCell) {
-					const paramName = nameCell.textContent.trim();
-					let paramValue = '';
-					let paramLink = '';
+			if (nameCell && valueCell && nameCell !== valueCell) {
+				const paramName = nameCell.textContent.trim();
+				let paramValue = '';
+				let paramLink = '';
 
-					console.log(`   📋 Wiersz ${index + 1}: "${paramName}"`);
+				console.log(`   📋 Wiersz ${index + 1}: "${paramName}"`);
 
-					// Sprawdź czy wartość ma link
-					const valueLink = valueCell.querySelector('a');
-					if (valueLink) {
-						paramValue = valueLink.textContent.trim();
-						paramLink = valueLink.href;
-						console.log(`      → Wartość z linkiem: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
+				// Sprawdź czy wartość ma link
+				const valueLink = valueCell.querySelector('a');
+				if (valueLink) {
+					paramValue = valueLink.textContent.trim();
+					paramLink = valueLink.href;
+					console.log(`      → Wartość z linkiem: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
+				} else {
+					const valueDiv = valueCell.querySelector('div._3c6dd_KEYaD') || valueCell.querySelector('div');
+					if (valueDiv) {
+						paramValue = valueDiv.textContent.trim();
+						console.log(`      → Wartość z div: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
 					} else {
-						// Sprawdź czy jest w div._3c6dd_KEYaD
-						const valueDiv = valueCell.querySelector('div._3c6dd_KEYaD');
-						if (valueDiv) {
-							paramValue = valueDiv.textContent.trim();
-							console.log(`      → Wartość z div: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
-						} else {
-							paramValue = valueCell.textContent.trim();
-							console.log(`      → Wartość z td: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
-						}
+						paramValue = valueCell.textContent.trim();
+						console.log(`      → Wartość z td: "${paramValue.substring(0, 50)}${paramValue.length > 50 ? '...' : ''}"`);
 					}
+				}
 
 					// CZYSZCZENIE: Dla parametru "Stan" = "Nowy" odetnij wyjaśnienie
 					if (paramName.toLowerCase() === 'stan' && paramValue.startsWith('Nowy')) {
