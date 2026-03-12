@@ -46,14 +46,15 @@ function handleAnalyzeImage(params) {
     "- Akcesoria w zestawie (słuchawki, ładowarka) = DOZWOLONE (extraElements.detected = false jeśli to część zestawu).\n" +
     "- Ręka trzymająca produkt = DOZWOLONE.\n" +
     "- ETYKIETA PRODUKTU (np. nadruk z nazwą, wagą, pojemnością, kodem kreskowym, składem, instrukcją na opakowaniu) = DOZWOLONE – to integralna część produktu, NIE jest 'dodatkowym elementem graficznym'. Ustaw extraElements.detected = false i details = 'Etykieta produktu – dozwolone'.\n" +
-    "- extraElements.detected = true TYLKO gdy na zdjęciu są ZEWNĘTRZNE elementy graficzne nałożone przez sprzedawcę: banery, ramki, strzałki wskazujące na cechy, naklejki reklamowe – czyli elementy NIENALEŻĄCE do samego produktu.";
+    "- extraElements.detected = true TYLKO gdy na zdjęciu są ZEWNĘTRZNE elementy graficzne nałożone przez sprzedawcę: banery, ramki, strzałki wskazujące na cechy, naklejki reklamowe – czyli elementy NIENALEŻĄCE do samego produktu.\n" +
+    "- TŁO: W wielu kategoriach (np. odzież, moda) Allegro dopuszcza tło szare lub neutralne – NIE musi być białe. Jednolite, profesjonalne tło szare/neutralne oceniaj score 70-85 i assessment np. \"Tło szare/neutralne – dopuszczalne w tej kategorii\". NIE pisz że łamie regulamin. Nisko (poniżej 60) oceniaj tylko tło niejednolite, brudne lub wyraźnie nieprofesjonalne.";
 
   var userPrompt = "Oceń to zdjęcie pod kątem standardów miniatury Allegro.\n" +
-    "1. Czy tło jest w większości białe?\n" +
+    "1. Czy tło jest białe, szare lub neutralne i jednolite? (w części kategorii, np. odzież, tło szare jest dopuszczalne).\n" +
     "2. Czy produkt zajmuje odpowiednią część kadru?\n" +
     "3. DOZWOLONE: logo marki produktu, nazwa modelu, parametry techniczne, akcesoria w zestawie, etykieta produktu (nadruk z nazwą/wagą/składem/kodem kreskowym na opakowaniu).\n" +
     "4. NIEDOZWOLONE: znaki wodne, teksty promocyjne (-50%, PROMOCJA, TANIEJ), cudze loga (nie producenta), nałożone banery/ramki/strzałki reklamowe.\n" +
-    "5. WYMAGANE: Oceń ostrość (visualQuality.sharpness: score 0-100 i assessment) i profesjonalność tła (visualQuality.background: score 0-100 i assessment).\n\n" +
+    "5. WYMAGANE: Ostrość (sharpness) i profesjonalność tła (background). Dla tła białego: 85-100; dla jednolitego szarego/neutralnego: 70-85 (nie pisz że łamie regulamin); nisko tylko przy niejednolitym/nieprofesjonalnym.\n\n" +
     "Zwróć odpowiedź TYLKO w formacie JSON (wszystkie pola obowiązkowe):\n" +
     "{\n" +
     "  \"overallAIScore\": 90,\n" +

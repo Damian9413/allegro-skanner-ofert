@@ -1371,7 +1371,7 @@ class AllegroOfferScanner {
 			};
 		}
 
-		return {
+		const out = {
 			regulaminCompliance: {
 				...defaults.regulaminCompliance,
 				...rc,
@@ -1390,6 +1390,17 @@ class AllegroOfferScanner {
 			summary: defaults.summary,
 			aiErrors: defaults.aiErrors
 		};
+		// Nadpisanie: jeśli AI oznaczyło "dodatkowe" ale opis brzmi jak etykieta produktu (waga, 25 kg, 40L, logo), traktuj jako OK
+		const ext = out.regulaminCompliance && out.regulaminCompliance.extraElements;
+		if (ext && ext.detected && ext.details) {
+			const detailsLower = String(ext.details).toLowerCase();
+			const looksLikeProductLabel = /\b(25\s*kg|40\s*l|40l|waga|pojemność|napisy|strzałki|logo|opakowan|etykieta|skład|kod\s*kreskow|informacje\s*o\s*wadze|widoczne\s*napisy)\b/i.test(detailsLower)
+				|| /25\s*kg|40l|40\s*l|widoczne napisy/.test(detailsLower);
+			if (looksLikeProductLabel) {
+				out.regulaminCompliance.extraElements = { detected: false, details: 'Etykieta produktu – dozwolone' };
+			}
+		}
+		return out;
 	}
 
 		ensureUIInjected() {
@@ -5254,9 +5265,11 @@ class AllegroOfferScanner {
 					throw new Error('Użytkownik nie jest zalogowany');
 				}
 
-				const apiUrl = `${AI_API_URL}?action=analyze_image&email=${encodeURIComponent(userEmail)}&imageUrl=${encodeURIComponent(originalImageUrl)}`;
+				const categoryName = (this.sellerCategoryName || '').trim();
+				const apiUrl = `${AI_API_URL}?action=analyze_image&email=${encodeURIComponent(userEmail)}&imageUrl=${encodeURIComponent(originalImageUrl)}&category=${encodeURIComponent(categoryName)}`;
 				console.log('📤 Wysyłam żądanie do Apps Script (analiza obrazu)...');
 				console.log(`   - Email: ${userEmail}`);
+				console.log(`   - Kategoria: ${categoryName || '(nieznana)'}`);
 				console.log(`   - Oryginalny URL: ${originalImageUrl.substring(0, 80)}...`);
 
 				const response = await extensionFetch(apiUrl);
@@ -5271,7 +5284,7 @@ class AllegroOfferScanner {
 				const result = await response.json();
 
 				if (result.success && result.data) {
-					this.aiImageAnalysis = result.data;
+					this.aiImageAnalysis = this.normalizeAiImageAnalysis(result.data);
 					console.log('✅ Otrzymano analizę AI obrazu');
 					console.log(`📊 Ocena AI: ${this.aiImageAnalysis.overallAIScore}%`);
 
@@ -6644,22 +6657,41 @@ class AllegroOfferScanner {
 		console.log('❌ Brak H1 w opisie');
 	}
 
-		// H2 — liczymy sekcje z dłuższym tekstem (>80 znaków) i sprawdzamy ile ma H2
-		// "Sekcja" = bezpośrednie dziecko kontenera opisu będące blokiem (<div>, <section>, <article>)
-		const blockChildren = Array.from(descContainer.children).filter(el => {
-			const tag = el.tagName.toLowerCase();
-			return ['div', 'section', 'article', 'p'].includes(tag);
-		});
+	// H2 — zbieramy sekcje z dwóch poziomów (Allegro często ma wrapper, a sekcje są wewnątrz)
+	const MIN_SECTION_CHARS = 60;
+	const blockTags = ['div', 'section', 'article', 'p'];
 
-		let total = 0;
-		let withH2 = 0;
+	function isBlock(el) {
+		return blockTags.includes((el.tagName || '').toLowerCase());
+	}
 
-		for (const block of blockChildren) {
-			const textLength = block.textContent.trim().length;
-			if (textLength < 80) continue; // pomijamy bardzo krótkie bloki
-			total++;
-			if (block.querySelector('h2')) withH2++;
+	function getSections(parent) {
+		const out = [];
+		for (const el of parent.children) {
+			if (!isBlock(el)) continue;
+			const len = el.textContent.trim().length;
+			if (len >= MIN_SECTION_CHARS) out.push(el);
 		}
+		return out;
+	}
+
+	// Poziom 1: bezpośrednie dzieci kontenera
+	let sections = getSections(descContainer);
+
+	// Poziom 2: jeśli jest mało sekcji, weź dzieci pierwszego poziomu (wrapper na Allegro)
+	if (sections.length <= 1) {
+		const deeper = [];
+		for (const top of Array.from(descContainer.children)) {
+			if (!isBlock(top)) continue;
+			for (const sub of getSections(top)) {
+				if (sub.textContent.trim().length >= MIN_SECTION_CHARS) deeper.push(sub);
+			}
+		}
+		if (deeper.length > 0) sections = deeper;
+	}
+
+	let total = sections.length;
+	let withH2 = sections.filter(block => block.querySelector('h2')).length;
 
 		const percent = total > 0 ? Math.round((withH2 / total) * 100) : 0;
 		this.descriptionH2 = { total, withH2, percent };
@@ -7511,7 +7543,6 @@ class AllegroOfferScanner {
 		const packagingConditionValue = this.packagingConditionValue;
 		const titleIssues = this.titleIssues;
 		const descriptionH1 = this.descriptionH1;
-		const descriptionH2 = this.descriptionH2;
 
 		// Monety i Kupony
 		const hasCoins = this.hasCoins;
@@ -8349,23 +8380,6 @@ class AllegroOfferScanner {
 								: '❌ Brak – dodaj H1 na początku opisu (powtórzenie tytułu)'}
 						</td>
 					</tr>
-					<tr>
-						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówki H2 w sekcjach</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.descriptionH2.total === 0 ? '#6b7280' : this.descriptionH2.percent === 100 ? '#059669' : '#d97706'};">
-							${this.descriptionH2.total === 0
-								? '–'
-								: this.descriptionH2.percent === 100
-									? `✅ ${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (100%)`
-									: `⚠️ ${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (${this.descriptionH2.percent}%)`}
-						</td>
-					</tr>
-					${this.descriptionH2.total > 0 && this.descriptionH2.percent < 100 ? `
-					<tr>
-						<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#fff7ed; border-left:3px solid #f97316; color:#7c2d12; font-size:12px;">
-							⚠️ <strong>Zalecane:</strong> Dodaj nagłówki H2 na początku sekcji, które ich nie mają (${this.descriptionH2.total - this.descriptionH2.withH2} z ${this.descriptionH2.total}). Nagłówki H2 poprawiają indeksowanie przez wyszukiwarki i czytelność opisu.
-						</td>
-					</tr>
-					` : ''}
 				</tbody>
 			</table>
 			
@@ -8607,6 +8621,9 @@ class AllegroOfferScanner {
 							<div style="color:#6b7280; font-size:12px; margin-top:8px; padding:8px; background:#f9fafb; border-radius:4px;">
 								<strong>Rekomendacja:</strong> Ramka wokół miniatury (5% z każdej strony) powinna być biała. Celuj w ≥60% białych pikseli w obszarze ramki.
 							</div>
+							<div style="color:#6b7280; font-size:11px; margin-top:6px; padding:6px; background:#eff6ff; border-left:2px solid #3b82f6; border-radius:4px;">
+								ℹ️ W części kategorii (np. odzież) tło szare lub neutralne jest dopuszczalne według Allegro – nie musi być białe.
+							</div>
 						</div>
 
 						${this.imageQuality.complexity && this.imageQuality.complexity.status !== 'unknown' ? `
@@ -8775,6 +8792,9 @@ class AllegroOfferScanner {
 										</div>
 										<div style="font-size: 12px; color: #6b7280;">
 											${escapeHtml(this.aiImageAnalysis.visualQuality.background.assessment || 'Brak oceny')}
+										</div>
+										<div style="font-size: 11px; color: #6b7280; margin-top: 6px; padding: 6px; background: #eff6ff; border-radius: 4px;">
+											ℹ️ W części kategorii (np. odzież) tło szare lub neutralne jest dopuszczalne – nie łamie regulaminu.
 										</div>
 									</div>
 								</div>
@@ -9644,23 +9664,6 @@ class AllegroOfferScanner {
 								: '❌ Brak – dodaj H1 na początku opisu (powtórzenie tytułu)'}
 						</td>
 					</tr>
-					<tr>
-						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówki H2 w sekcjach</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:700; color:${this.descriptionH2.total === 0 ? '#6b7280' : this.descriptionH2.percent === 100 ? '#059669' : '#d97706'};">
-							${this.descriptionH2.total === 0
-								? '–'
-								: this.descriptionH2.percent === 100
-									? `✅ ${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (100%)`
-									: `⚠️ ${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (${this.descriptionH2.percent}%)`}
-						</td>
-					</tr>
-					${this.descriptionH2.total > 0 && this.descriptionH2.percent < 100 ? `
-					<tr>
-						<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#fff7ed; border-left:3px solid #f97316; color:#7c2d12; font-size:12px;">
-							⚠️ <strong>Zalecane:</strong> Dodaj nagłówki H2 na początku sekcji, które ich nie mają (${this.descriptionH2.total - this.descriptionH2.withH2} z ${this.descriptionH2.total}). Nagłówki H2 poprawiają indeksowanie przez wyszukiwarki i czytelność opisu.
-						</td>
-					</tr>
-					` : ''}
 				</tbody>
 			</table>
 			

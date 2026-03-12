@@ -28,6 +28,7 @@ function doGet(e) {
   const password = e.parameter.password;
   const amount = e.parameter.amount;
   const imageUrl = e.parameter.imageUrl;
+  const category = e.parameter.category || '';
   const newPassword = e.parameter.new_password;
 
   Logger.log('GET request - action: ' + action + ', email: ' + email);
@@ -45,7 +46,7 @@ function doGet(e) {
       case 'add_reports':
         return handleAddReports({email: email, amount: parseInt(amount)});
       case 'analyze_image':
-        return handleAnalyzeImage({email: email, imageUrl: imageUrl});
+        return handleAnalyzeImage({email: email, imageUrl: imageUrl, category: category});
       case 'reset_password':
         return handleResetPassword({email: email, new_password: newPassword});
       default:
@@ -583,8 +584,9 @@ Napisz gotowy, przykładowy akapit na początek opisu (2–3 zdania), który od 
 function handleAnalyzeImage(data) {
   const email = data.email;
   const imageUrl = data.imageUrl;
+  const category = (data.category || '').trim();
 
-  Logger.log('📸 Analiza obrazu - email: ' + email + ', imageUrl: ' + imageUrl);
+  Logger.log('📸 Analiza obrazu - email: ' + email + ', kategoria: ' + (category || '(nieznana)'));
 
   if (!email) {
     return createResponse(false, 'Email jest wymagany');
@@ -605,7 +607,7 @@ function handleAnalyzeImage(data) {
   }
 
   try {
-    const analysisResult = callOpenAIVision(imageUrl, apiKey);
+    const analysisResult = callOpenAIVision(imageUrl, apiKey, category);
 
     Logger.log('✅ Analiza zakończona pomyślnie');
 
@@ -633,9 +635,27 @@ function handleAnalyzeImage(data) {
   }
 }
 
-function callOpenAIVision(imageUrl, apiKey) {
+/**
+ * Kategorie Allegro, w których tło szare/neutralne jest dopuszczalne (np. odzież, moda).
+ * Sprawdzenie po fragmentach nazwy kategorii (bez rozróżniania wielkości liter).
+ */
+function isGrayBackgroundAllowedForCategory(categoryName) {
+  if (!categoryName || typeof categoryName !== 'string') return false;
+  const k = categoryName.toLowerCase();
+  const allowed = ['odzież', 'odziez', 'moda', 'ubrania', 'obuwie', 't-shirty', 'tshirty', 'bluzki', 'spodnie', 'sukienki', 'bielizna', 'akcesoria odzieżowe', 'odzież damska', 'odzież męska', 'odzież dziecięca', 'kurtki', 'swetry', 'koszule', 'garnitury', 'sportowa', 'biżuteria', 'torebki', 'zegarki'];
+  return allowed.some(term => k.indexOf(term) !== -1);
+}
+
+function callOpenAIVision(imageUrl, apiKey, category) {
   if (!apiKey) apiKey = getOpenAIKey();
   const apiUrl = 'https://api.openai.com/v1/chat/completions';
+
+  const categoryLabel = (category || '').trim() || 'nieznana';
+  const grayAllowed = isGrayBackgroundAllowedForCategory(categoryLabel);
+
+  const backgroundInstruction = grayAllowed
+    ? 'Profesjonalność tła: KATEGORIA OFERTY: "' + categoryLabel + '". W tej kategorii (odzież/moda) Allegro DOPUSZCZA tło szare lub neutralne – nie musi być białe. Jednolite szare/neutralne oceniaj score 70-85, assessment np. "Tło szare/neutralne – dopuszczalne w tej kategorii". Nisko (poniżej 60) tylko przy niejednolitym lub nieprofesjonalnym tle.'
+    : 'Profesjonalność tła: KATEGORIA OFERTY: "' + categoryLabel + '". W tej kategorii WYMAGANE JEST BIAŁE TŁO według Allegro. Jeśli tło jest szare lub neutralne – oceniaj score PONIŻEJ 60 i w assessment napisz że tło powinno być białe (niezgodne z wytycznymi dla tej kategorii). Wysoko (85-100) tylko dla białego, jednolitego tła.';
 
   const prompt = `Przeanalizuj to zdjęcie produktu z Allegro i oceń je według następujących kryteriów. Odpowiedz WYŁĄCZNIE w formacie JSON bez żadnych dodatkowych komentarzy.
 
@@ -645,13 +665,13 @@ KRYTERIA ANALIZY:
    - Znaki wodne / watermarki
    - Tekst promocyjny (PROMOCJA, GRATIS, -50%, NAJNIŻSZA CENA, itp.)
    - Cudze logotypy (innych sklepów, platform, konkurencji)
-   - Napisy, strzałki, ramki i inne elementy graficzne które nie są częścią produktu
+   - WAŻNE – extraElements: NIE uznawaj za „dodatkowe” etykiety produktu. Logo marki na opakowaniu, nazwa produktu, waga (np. 25 kg), pojemność (40L), kod kreskowy, skład – to etykieta produktu = ustaw extraElements.detected = false, details = „Etykieta produktu – dozwolone”. extraElements.detected = true TYLKO gdy na zdjęciu są nałożone przez sprzedawcę: banery, ramki, strzałki reklamowe, naklejki promocyjne.
    - Różne warianty kolorystyczne produktu widoczne na miniaturze (np. 5 kolorów butów)
    - Niestosowne treści (kontrowersyjne, nieodpowiednie elementy)
 
 2. JAKOŚĆ WIZUALNA:
    - Ostrość zdjęcia (czy jest rozmazane czy ostre)
-   - Profesjonalność tła (najlepiej białe/neutralne, jednolite)
+   - ` + backgroundInstruction + `
 
 Format odpowiedzi JSON:
 {
@@ -665,7 +685,7 @@ Format odpowiedzi JSON:
   },
   "visualQuality": {
     "sharpness": {"score": 85, "assessment": "Bardzo ostre zdjęcie" lub "Lekko rozmazane" itp.},
-    "background": {"score": 90, "assessment": "Profesjonalne białe tło" lub "Niejednolite tło" itp.}
+    "background": {"score": 90, "assessment": "Profesjonalne białe tło" lub "Tło szare/neutralne – dopuszczalne" lub "Niejednolite tło" itp.}
   },
   "overallAIScore": 88,
   "summary": "Krótkie podsumowanie analizy"
