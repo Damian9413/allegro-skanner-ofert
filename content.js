@@ -7742,57 +7742,82 @@ class AllegroOfferScanner {
 				</div>
 				` : ''}
 
-				<div class="section">
-					<div class="section-title">⭐ Ocena produktu</div>
-			<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
-				<thead>
-					<tr style="background:#f9fafb;">
-						<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Parametr</th>
-						<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:100px;">Wartość</th>
-						<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:180px;">Ocena</th>
-						<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Rekomendacja</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr>
-						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Jakość oceny</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">
-							${rating > 0 ? rating.toFixed(2) : 'Brak'}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.ratingValueEvaluation.color};">
-							${this.ratingValueEvaluation.rating}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; color:${this.ratingValueEvaluation.color};">
-							${this.ratingValueEvaluation.recommendation}
-						</td>
-					</tr>
-					<tr>
-						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Liczba ocen</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">
-							${ratingCount > 0 ? ratingCount : 'Brak'}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.ratingCountEvaluation.color};">
-							${this.ratingCountEvaluation.rating}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; color:${this.ratingCountEvaluation.color};">
-							${this.ratingCountEvaluation.recommendation}
-						</td>
-					</tr>
-					<tr>
-						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Liczba recenzji</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">
-							${reviewCount > 0 ? reviewCount : 'Brak'}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.reviewCountEvaluation.color};">
-							${this.reviewCountEvaluation.rating}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; color:${this.reviewCountEvaluation.color};">
-							${this.reviewCountEvaluation.recommendation}
-						</td>
-					</tr>
-				</tbody>
-			</table>
+			<div class="section">
+				<div class="section-title">⭐ Ocena produktu</div>
+				<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
+					<thead>
+						<tr style="background:#f9fafb;">
+							<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Metryka</th>
+							<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:100px;">Wynik</th>
+							<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:120px;">Status</th>
+							<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Rekomendacja Systemu</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Liczba ocen</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">${ratingCount > 0 ? ratingCount : 'Brak'}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.ratingCountEvaluation.color};">${this.ratingCountEvaluation.rating}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; color:${this.ratingCountEvaluation.color};">${this.ratingCountEvaluation.recommendation}</td>
+						</tr>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Liczba recenzji</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">${reviewCount > 0 ? reviewCount : 'Brak'}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.reviewCountEvaluation.color};">${this.reviewCountEvaluation.rating}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; color:${this.reviewCountEvaluation.color};">${this.reviewCountEvaluation.recommendation}</td>
+						</tr>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Średnia ocen</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">${rating > 0 ? rating.toFixed(2) : 'Brak'}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.ratingValueEvaluation.color};">${this.ratingValueEvaluation.rating}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; color:${this.ratingValueEvaluation.color};">${this.ratingValueEvaluation.recommendation}</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<!-- WSKAZÓWKI EKSPERCKIE -->
+				<div style="margin-top:16px; border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;">
+
+					<!-- Infoboks: Zmiana algorytmu Allegro -->
+					<div style="background:#eff6ff; border-bottom:1px solid #bfdbfe; padding:12px 16px; display:flex; align-items:flex-start; gap:10px;">
+						<span style="font-size:18px; flex-shrink:0;">ℹ️</span>
+						<div>
+							<div style="font-weight:700; color:#1d4ed8; margin-bottom:4px; font-size:13px;">Ważne: Zmiany w algorytmie Allegro</div>
+							<div style="font-size:12px; color:#1e40af; line-height:1.5;">Obecnie przy sortowaniu listingu liczą się: <strong>średnia ocena</strong>, <strong>liczba ocen</strong> oraz <strong>wskaźnik świeżości</strong>. Produkt z oceną 4.79, ale z ogromną liczbą nowych opinii, będzie wyżej niż produkt z oceną 5.0, który ma tylko dwie stare oceny.</div>
+						</div>
+					</div>
+
+					<!-- Nagłówek sekcji wskazówek -->
+					<div style="background:#f9fafb; padding:10px 16px; border-bottom:1px solid #e5e7eb;">
+						<div style="font-weight:700; color:#374151; font-size:13px;">💡 Wskazówki optymalizacyjne – Jak działać na listingu?</div>
+					</div>
+
+					<!-- Dwie kolumny: CO ROBIĆ / CZEGO NIE WOLNO -->
+					<div style="display:flex; gap:0;">
+
+						<!-- CO ROBIĆ -->
+						<div style="flex:1; padding:14px 16px; border-right:1px solid #e5e7eb; background:#f0fdf4;">
+							<div style="font-weight:700; color:#15803d; margin-bottom:10px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em;">✅ Co robić (Dobre praktyki)</div>
+							<ul style="margin:0; padding:0; list-style:none; font-size:12px; color:#166534; line-height:1.6;">
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Stawiaj na skalę:</strong> Duża liczba pozytywów "przykryje" pojedyncze błędy i utrzyma Cię wysoko.</span></li>
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Dbaj o "świeżość":</strong> Algorytm kocha nowe opinie. Jeśli oferta spada, pobudzaj sprzedaż (np. czasowymi obniżkami).</span></li>
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Miłe gesty w paczce:</strong> Dorzucaj próbki, cukierki lub liściki z podziękowaniem – buduje to wdzięczność i chęć wystawienia 5 gwiazdek.</span></li>
+								<li style="display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Proś wprost:</strong> Zawsze proś o opinię w wiadomości lub ulotce (ale nic za nią nie oferuj!).</span></li>
+							</ul>
+						</div>
+
+						<!-- CZEGO NIE WOLNO -->
+						<div style="flex:1; padding:14px 16px; background:#fff7f7;">
+							<div style="font-weight:700; color:#b91c1c; margin-bottom:10px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em;">❌ Czego nie wolno (Ryzyko blokady)</div>
+							<ul style="margin:0; padding:0; list-style:none; font-size:12px; color:#7f1d1d; line-height:1.6;">
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Handel opiniami:</strong> Surowy zakaz oferowania rabatów, gratisów czy gotówki w zamian za ocenę lub jej zmianę.</span></li>
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Szantaż reklamacyjny:</strong> Nie uzależniaj zwrotu wpłaty od usunięcia negatywu. Najpierw pomóż, potem licz na dobrą wolę.</span></li>
+								<li style="display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Sztuczny ruch:</strong> Kupowanie własnych produktów dla opinii jest łatwo wykrywalne i surowo karane przez Allegro.</span></li>
+							</ul>
+						</div>
+					</div>
 				</div>
+			</div>
 
 			<!-- TABELA: Funkcje Allegro -->
 				<div class="section">
@@ -7837,15 +7862,6 @@ class AllegroOfferScanner {
 										</td>
 										<td style="padding:12px; border:1px solid #e5e7eb; color:${features.allegroPay.hasFeature ? '#059669' : '#dc2626'};">
 											${features.allegroPay.recommendation}
-										</td>
-									</tr>
-									<tr>
-										<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">🪙 Smart! Monety</td>
-										<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-size:18px;">
-											${features.coins.hasFeature ? '✅' : '❌'}
-										</td>
-										<td style="padding:12px; border:1px solid #e5e7eb; color:${features.coins.hasFeature ? '#059669' : '#dc2626'};">
-											${features.coins.recommendation}
 										</td>
 									</tr>
 									<tr>
@@ -9015,59 +9031,84 @@ class AllegroOfferScanner {
 				</div>
 				` : ''}
 
-				<div style="margin-bottom:24px;">
-					<div style="font-size:18px; font-weight:600; color:#374151; margin-bottom:12px; padding:8px; background:#f9fafb; border-left:4px solid #ff5a00;">
-						⭐ Ocena produktu
-					</div>
-			<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
-				<thead>
-					<tr style="background:#f9fafb;">
-						<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Parametr</th>
-						<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:100px;">Wartość</th>
-						<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:180px;">Ocena</th>
-						<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Rekomendacja</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr>
-						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Jakość oceny</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">
-							${rating > 0 ? rating.toFixed(2) : 'Brak'}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.ratingValueEvaluation.color};">
-							${this.ratingValueEvaluation.rating}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; color:${this.ratingValueEvaluation.color};">
-							${this.ratingValueEvaluation.recommendation}
-						</td>
-					</tr>
-					<tr>
-						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Liczba ocen</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">
-							${ratingCount > 0 ? ratingCount : 'Brak'}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.ratingCountEvaluation.color};">
-							${this.ratingCountEvaluation.rating}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; color:${this.ratingCountEvaluation.color};">
-							${this.ratingCountEvaluation.recommendation}
-						</td>
-					</tr>
-					<tr>
-						<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Liczba recenzji</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">
-							${reviewCount > 0 ? reviewCount : 'Brak'}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.reviewCountEvaluation.color};">
-							${this.reviewCountEvaluation.rating}
-						</td>
-						<td style="padding:12px; border:1px solid #e5e7eb; color:${this.reviewCountEvaluation.color};">
-							${this.reviewCountEvaluation.recommendation}
-						</td>
-					</tr>
-				</tbody>
-			</table>
+			<div style="margin-bottom:24px;">
+				<div style="font-size:18px; font-weight:600; color:#374151; margin-bottom:12px; padding:8px; background:#f9fafb; border-left:4px solid #ff5a00;">
+					⭐ Ocena produktu
 				</div>
+				<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
+					<thead>
+						<tr style="background:#f9fafb;">
+							<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Metryka</th>
+							<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:100px;">Wynik</th>
+							<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:120px;">Status</th>
+							<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Rekomendacja Systemu</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Liczba ocen</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">${ratingCount > 0 ? ratingCount : 'Brak'}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.ratingCountEvaluation.color};">${this.ratingCountEvaluation.rating}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; color:${this.ratingCountEvaluation.color};">${this.ratingCountEvaluation.recommendation}</td>
+						</tr>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Liczba recenzji</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">${reviewCount > 0 ? reviewCount : 'Brak'}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.reviewCountEvaluation.color};">${this.reviewCountEvaluation.rating}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; color:${this.reviewCountEvaluation.color};">${this.reviewCountEvaluation.recommendation}</td>
+						</tr>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Średnia ocen</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700;">${rating > 0 ? rating.toFixed(2) : 'Brak'}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.ratingValueEvaluation.color};">${this.ratingValueEvaluation.rating}</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; color:${this.ratingValueEvaluation.color};">${this.ratingValueEvaluation.recommendation}</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<!-- WSKAZÓWKI EKSPERCKIE -->
+				<div style="margin-top:16px; border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;">
+
+					<!-- Infoboks: Zmiana algorytmu Allegro -->
+					<div style="background:#eff6ff; border-bottom:1px solid #bfdbfe; padding:12px 16px; display:flex; align-items:flex-start; gap:10px;">
+						<span style="font-size:18px; flex-shrink:0;">ℹ️</span>
+						<div>
+							<div style="font-weight:700; color:#1d4ed8; margin-bottom:4px; font-size:13px;">Ważne: Zmiany w algorytmie Allegro</div>
+							<div style="font-size:12px; color:#1e40af; line-height:1.5;">Obecnie przy sortowaniu listingu liczą się: <strong>średnia ocena</strong>, <strong>liczba ocen</strong> oraz <strong>wskaźnik świeżości</strong>. Produkt z oceną 4.79, ale z ogromną liczbą nowych opinii, będzie wyżej niż produkt z oceną 5.0, który ma tylko dwie stare oceny.</div>
+						</div>
+					</div>
+
+					<!-- Nagłówek sekcji wskazówek -->
+					<div style="background:#f9fafb; padding:10px 16px; border-bottom:1px solid #e5e7eb;">
+						<div style="font-weight:700; color:#374151; font-size:13px;">💡 Wskazówki optymalizacyjne – Jak działać na listingu?</div>
+					</div>
+
+					<!-- Dwie kolumny: CO ROBIĆ / CZEGO NIE WOLNO -->
+					<div style="display:flex; gap:0;">
+
+						<!-- CO ROBIĆ -->
+						<div style="flex:1; padding:14px 16px; border-right:1px solid #e5e7eb; background:#f0fdf4;">
+							<div style="font-weight:700; color:#15803d; margin-bottom:10px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em;">✅ Co robić (Dobre praktyki)</div>
+							<ul style="margin:0; padding:0; list-style:none; font-size:12px; color:#166534; line-height:1.6;">
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Stawiaj na skalę:</strong> Duża liczba pozytywów "przykryje" pojedyncze błędy i utrzyma Cię wysoko.</span></li>
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Dbaj o "świeżość":</strong> Algorytm kocha nowe opinie. Jeśli oferta spada, pobudzaj sprzedaż (np. czasowymi obniżkami).</span></li>
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Miłe gesty w paczce:</strong> Dorzucaj próbki, cukierki lub liściki z podziękowaniem – buduje to wdzięczność i chęć wystawienia 5 gwiazdek.</span></li>
+								<li style="display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Proś wprost:</strong> Zawsze proś o opinię w wiadomości lub ulotce (ale nic za nią nie oferuj!).</span></li>
+							</ul>
+						</div>
+
+						<!-- CZEGO NIE WOLNO -->
+						<div style="flex:1; padding:14px 16px; background:#fff7f7;">
+							<div style="font-weight:700; color:#b91c1c; margin-bottom:10px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em;">❌ Czego nie wolno (Ryzyko blokady)</div>
+							<ul style="margin:0; padding:0; list-style:none; font-size:12px; color:#7f1d1d; line-height:1.6;">
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Handel opiniami:</strong> Surowy zakaz oferowania rabatów, gratisów czy gotówki w zamian za ocenę lub jej zmianę.</span></li>
+								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Szantaż reklamacyjny:</strong> Nie uzależniaj zwrotu wpłaty od usunięcia negatywu. Najpierw pomóż, potem licz na dobrą wolę.</span></li>
+								<li style="display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Sztuczny ruch:</strong> Kupowanie własnych produktów dla opinii jest łatwo wykrywalne i surowo karane przez Allegro.</span></li>
+							</ul>
+						</div>
+					</div>
+				</div>
+			</div>
 
 		<!-- TABELA: Funkcje Allegro -->
 				<div style="margin-bottom:24px;">
@@ -9111,15 +9152,6 @@ class AllegroOfferScanner {
 									</td>
 									<td style="padding:12px; border:1px solid #e5e7eb; color:${features.allegroPay.hasFeature ? '#059669' : '#dc2626'};">
 										${features.allegroPay.recommendation}
-									</td>
-								</tr>
-								<tr>
-									<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">🪙 Smart! Monety</td>
-									<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-size:18px;">
-										${features.coins.hasFeature ? '✅' : '❌'}
-									</td>
-									<td style="padding:12px; border:1px solid #e5e7eb; color:${features.coins.hasFeature ? '#059669' : '#dc2626'};">
-										${features.coins.recommendation}
 									</td>
 								</tr>
 								<tr>
