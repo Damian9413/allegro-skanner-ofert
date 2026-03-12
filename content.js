@@ -7801,8 +7801,7 @@ class AllegroOfferScanner {
 							<ul style="margin:0; padding:0; list-style:none; font-size:12px; color:#166534; line-height:1.6;">
 								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Stawiaj na skalę:</strong> Duża liczba pozytywów "przykryje" pojedyncze błędy i utrzyma Cię wysoko.</span></li>
 								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Dbaj o "świeżość":</strong> Algorytm kocha nowe opinie. Jeśli oferta spada, pobudzaj sprzedaż (np. czasowymi obniżkami).</span></li>
-								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Miłe gesty w paczce:</strong> Dorzucaj próbki, cukierki lub liściki z podziękowaniem – buduje to wdzięczność i chęć wystawienia 5 gwiazdek.</span></li>
-								<li style="display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Proś wprost:</strong> Zawsze proś o opinię w wiadomości lub ulotce (ale nic za nią nie oferuj!).</span></li>
+								<li style="display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Miłe gesty w paczce:</strong> Dorzucaj próbki, cukierki lub liściki z podziękowaniem – buduje to wdzięczność i chęć wystawienia 5 gwiazdek.</span></li>
 							</ul>
 						</div>
 
@@ -9092,8 +9091,7 @@ class AllegroOfferScanner {
 							<ul style="margin:0; padding:0; list-style:none; font-size:12px; color:#166534; line-height:1.6;">
 								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Stawiaj na skalę:</strong> Duża liczba pozytywów "przykryje" pojedyncze błędy i utrzyma Cię wysoko.</span></li>
 								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Dbaj o "świeżość":</strong> Algorytm kocha nowe opinie. Jeśli oferta spada, pobudzaj sprzedaż (np. czasowymi obniżkami).</span></li>
-								<li style="margin-bottom:8px; display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Miłe gesty w paczce:</strong> Dorzucaj próbki, cukierki lub liściki z podziękowaniem – buduje to wdzięczność i chęć wystawienia 5 gwiazdek.</span></li>
-								<li style="display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Proś wprost:</strong> Zawsze proś o opinię w wiadomości lub ulotce (ale nic za nią nie oferuj!).</span></li>
+								<li style="display:flex; gap:6px;"><span style="flex-shrink:0;">•</span><span><strong>Miłe gesty w paczce:</strong> Dorzucaj próbki, cukierki lub liściki z podziękowaniem – buduje to wdzięczność i chęć wystawienia 5 gwiazdek.</span></li>
 							</ul>
 						</div>
 
