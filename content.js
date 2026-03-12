@@ -1162,12 +1162,21 @@ class AllegroOfferScanner {
 			this.hasAllegroPay = false; // Czy produkt ma opcję Allegro Pay
 			this.allegroPayType = ''; // Typ Allegro Pay: 'standard' lub 'installments'
 			this.allegroPayDetails = ''; // Szczegóły (np. "15 rat x 113,27 zł")
-			this.productParameters = []; // Lista parametrów produktu
-			this.parametersCount = 0; // Liczba parametrów
-			this.hasBrand = false; // Czy produkt ma markę
-			this.brandName = ''; // Nazwa marki lub 'bez marki'
-			this.brandLink = ''; // Link do marki
-			this.brandType = ''; // Typ: 'marka' lub 'producent'
+		this.productParameters = []; // Lista parametrów produktu
+		this.parametersCount = 0; // Liczba parametrów
+		this.hasBrand = false; // Czy produkt ma markę
+		this.brandName = ''; // Nazwa marki lub 'bez marki'
+		this.brandLink = ''; // Link do marki
+		this.brandType = ''; // Typ: 'marka' lub 'producent'
+		this.hasPackagingCondition = false; // Czy parametr "Stan opakowania" istnieje
+		this.packagingConditionValue = ''; // Wartość stanu opakowania (np. "Oryginalny")
+
+		// Analiza tytułu
+		this.titleIssues = []; // Lista naruszeń regulaminu Allegro w tytule
+
+		// Struktura nagłówków opisu
+		this.descriptionH1 = { exists: false, text: '' }; // Czy opis ma H1 na początku
+		this.descriptionH2 = { total: 0, withH2: 0, percent: 0 }; // Pokrycie sekcji nagłówkami H2
 
 			// Monety i Kupony
 			this.hasCoins = false; // Czy produkt ma Smart! Monety
@@ -5880,29 +5889,34 @@ class AllegroOfferScanner {
 							this.productParameters.push(parameter);
 						}
 
-						const paramNameLower = paramName.toLowerCase();
-						if (paramNameLower === 'marka' || paramNameLower === 'producent') {
-							const v = (paramValue || '').trim().toLowerCase();
-							const banned = ['bez marki','nieznany producent','nieznany','brak','inny'];
-							this.hasBrand = !banned.includes(v);
-							this.brandName = paramValue;
-							this.brandLink = paramLink;
-							this.brandType = paramNameLower;
-							console.log(`      🏷️ [SEQ] Znaleziono ${paramNameLower}: "${paramValue}"`);
-						}
-					} else {
-						// Debug: Jeśli nie znaleziono komórek
-						if (!nameCell) {
-							console.log(`   ⚠️ [SEQ] Wiersz ${index + 1}: Brak komórki nazwy`);
-						}
-						if (!valueCell) {
-							console.log(`   ⚠️ [SEQ] Wiersz ${index + 1}: Brak komórki wartości`);
-						}
+					const paramNameLower = paramName.toLowerCase();
+					if (paramNameLower === 'marka' || paramNameLower === 'producent') {
+						const v = (paramValue || '').trim().toLowerCase();
+						const banned = ['bez marki','nieznany producent','nieznany','brak','inny'];
+						this.hasBrand = !banned.includes(v);
+						this.brandName = paramValue;
+						this.brandLink = paramLink;
+						this.brandType = paramNameLower;
+						console.log(`      🏷️ [SEQ] Znaleziono ${paramNameLower}: "${paramValue}"`);
 					}
-				});
+					if (paramNameLower === 'stan opakowania') {
+						this.hasPackagingCondition = true;
+						this.packagingConditionValue = paramValue;
+						console.log(`      📦 [SEQ] Znaleziono stan opakowania: "${paramValue}"`);
+					}
+				} else {
+					// Debug: Jeśli nie znaleziono komórek
+					if (!nameCell) {
+						console.log(`   ⚠️ [SEQ] Wiersz ${index + 1}: Brak komórki nazwy`);
+					}
+					if (!valueCell) {
+						console.log(`   ⚠️ [SEQ] Wiersz ${index + 1}: Brak komórki wartości`);
+					}
+				}
+			});
 
-				this.parametersCount = this.productParameters.length;
-				console.log(`✅ [SEQ] Dane Parametrów zebrane: ${this.parametersCount} parametrów`);
+			this.parametersCount = this.productParameters.length;
+			console.log(`✅ [SEQ] Dane Parametrów zebrane: ${this.parametersCount} parametrów`);
 
 				// KROK 3.5: Analizuj parametry w opisie (teraz gdy mamy już i opis i parametry)
 				console.log('🔍 KROK 3.5: Analizuję obecność parametrów w opisie...');
@@ -5978,9 +5992,14 @@ class AllegroOfferScanner {
 				]);
 			}
 
-			// KROK 4: Oblicz jakość oferty i zaktualizuj UI
-			console.log('📊 KROK 4: Obliczam jakość oferty...');
-			this.offerQuality = this.calculateOfferQuality();
+		// KROK 3.9: Analiza tytułu i struktury opisu
+		console.log('📝 KROK 3.9: Analizuję tytuł i strukturę nagłówków opisu...');
+		this.analyzeTitleCompliance();
+		this.analyzeDescriptionStructure();
+
+		// KROK 4: Oblicz jakość oferty i zaktualizuj UI
+		console.log('📊 KROK 4: Obliczam jakość oferty...');
+		this.offerQuality = this.calculateOfferQuality();
 			this.lastScanDate = new Date();
 
 			const timeEl = document.getElementById(this.lastScanLabelId);
@@ -6496,24 +6515,27 @@ class AllegroOfferScanner {
 						this.productParameters.push(parameter);
 					}
 
-					// Sprawdź czy to jest marka lub producent
-					const paramNameLower = paramName.toLowerCase();
-					if (paramNameLower === 'marka' || paramNameLower === 'producent') {
-						const v = (paramValue || '').trim().toLowerCase();
-						const banned = ['bez marki','nieznany producent','nieznany','brak','inny'];
-						this.hasBrand = !banned.includes(v);
-						this.brandName = paramValue;
-						this.brandLink = paramLink;
-						this.brandType = paramNameLower; // Zapisz typ: 'marka' lub 'producent'
+				// Sprawdź czy to jest marka lub producent
+				const paramNameLower = paramName.toLowerCase();
+				if (paramNameLower === 'marka' || paramNameLower === 'producent') {
+					const v = (paramValue || '').trim().toLowerCase();
+					const banned = ['bez marki','nieznany producent','nieznany','brak','inny'];
+					this.hasBrand = !banned.includes(v);
+					this.brandName = paramValue;
+					this.brandLink = paramLink;
+					this.brandType = paramNameLower; // Zapisz typ: 'marka' lub 'producent'
 
-						// Zapisz informację o typie dla logów (marka czy producent)
-						const brandTypeDisplay = paramNameLower === 'marka' ? 'markę' : 'producenta';
-
-						console.log(`🏷️ Znaleziono ${brandTypeDisplay}: "${paramValue}" ${this.hasBrand ? `(ma ${brandTypeDisplay})` : '(bez marki)'}`);
-						if (paramLink) {
-							console.log(`🔗 Link do ${paramNameLower}: ${paramLink}`);
-						}
+					const brandTypeDisplay = paramNameLower === 'marka' ? 'markę' : 'producenta';
+					console.log(`🏷️ Znaleziono ${brandTypeDisplay}: "${paramValue}" ${this.hasBrand ? `(ma ${brandTypeDisplay})` : '(bez marki)'}`);
+					if (paramLink) {
+						console.log(`🔗 Link do ${paramNameLower}: ${paramLink}`);
 					}
+				}
+				if (paramNameLower === 'stan opakowania') {
+					this.hasPackagingCondition = true;
+					this.packagingConditionValue = paramValue;
+					console.log(`📦 Znaleziono stan opakowania: "${paramValue}"`);
+				}
 				} else {
 					// Debug: Jeśli nie znaleziono komórek
 					if (!nameCell) {
@@ -6549,13 +6571,93 @@ class AllegroOfferScanner {
 			console.log(`📊 KONIEC scanProductParameters - zebrano ${this.parametersCount} parametrów`);
 		}
 
-		extractDomain(url) {
-			try {
-				return new URL(url).hostname;
-			} catch (e) {
-				return 'Nieznana domena';
+	// Sprawdza tytuł oferty pod kątem zakazanych fraz z regulaminu Allegro.
+	// Wynik zapisuje do this.titleIssues jako tablicę obiektów { type, matched }.
+	analyzeTitleCompliance() {
+		this.titleIssues = [];
+		const title = (this.offerName || '').toLowerCase();
+		if (!title) return;
+
+		const BANNED_PHRASES = [
+			'tanio', 'najtaniej', 'okazja', 'nowość', 'nowosc', 'promocja',
+			'hit', 'wyprzedaż', 'wyprzedaz', 'super cena', 'najlepsza cena',
+			'rewelacyjn', 'niesamowit', 'najniższa cena', 'najnizsza cena',
+			'super oferta', 'wyjątkowa cena', 'wyjatkowa cena'
+		];
+
+		for (const phrase of BANNED_PHRASES) {
+			if (title.includes(phrase)) {
+				this.titleIssues.push({ type: 'banned_phrase', matched: phrase });
 			}
 		}
+
+		// Znaki specjalne użyte jako ozdobniki (poza kontekstem rozmiarów [38] itp.)
+		const specialCharPattern = /[@!]/g;
+		const specialMatches = (this.offerName || '').match(specialCharPattern);
+		if (specialMatches && specialMatches.length > 0) {
+			this.titleIssues.push({ type: 'special_chars', matched: [...new Set(specialMatches)].join(' ') });
+		}
+
+		if (this.titleIssues.length > 0) {
+			console.log(`⚠️ Tytuł: ${this.titleIssues.length} naruszeń regulaminu Allegro`);
+		} else {
+			console.log('✅ Tytuł: brak naruszeń regulaminu');
+		}
+	}
+
+	// Analizuje strukturę nagłówków H1 i H2 w treści opisu oferty.
+	// Wynik zapisuje do this.descriptionH1 i this.descriptionH2.
+	analyzeDescriptionStructure() {
+		this.descriptionH1 = { exists: false, text: '' };
+		this.descriptionH2 = { total: 0, withH2: 0, percent: 0 };
+
+		const descContainer = document.querySelector('[data-box-name="Description"]')
+			|| document.querySelector('.description-section')
+			|| document.querySelector('[data-testid="offer-description"]');
+
+		if (!descContainer) {
+			console.log('⚠️ analyzeDescriptionStructure: brak kontenera opisu');
+			return;
+		}
+
+		// H1 — sprawdzamy czy pierwszy węzeł blokowy to <h1>
+		const firstH1 = descContainer.querySelector('h1');
+		if (firstH1) {
+			this.descriptionH1 = { exists: true, text: firstH1.textContent.trim().substring(0, 100) };
+			console.log(`✅ Opis ma H1: "${this.descriptionH1.text}"`);
+		} else {
+			console.log('❌ Brak H1 w opisie');
+		}
+
+		// H2 — liczymy sekcje z dłuższym tekstem (>80 znaków) i sprawdzamy ile ma H2
+		// "Sekcja" = bezpośrednie dziecko kontenera opisu będące blokiem (<div>, <section>, <article>)
+		const blockChildren = Array.from(descContainer.children).filter(el => {
+			const tag = el.tagName.toLowerCase();
+			return ['div', 'section', 'article', 'p'].includes(tag);
+		});
+
+		let total = 0;
+		let withH2 = 0;
+
+		for (const block of blockChildren) {
+			const textLength = block.textContent.trim().length;
+			if (textLength < 80) continue; // pomijamy bardzo krótkie bloki
+			total++;
+			if (block.querySelector('h2')) withH2++;
+		}
+
+		const percent = total > 0 ? Math.round((withH2 / total) * 100) : 0;
+		this.descriptionH2 = { total, withH2, percent };
+		console.log(`📝 Sekcje opisu: ${withH2}/${total} ma H2 (${percent}%)`);
+	}
+
+	extractDomain(url) {
+		try {
+			return new URL(url).hostname;
+		} catch (e) {
+			return 'Nieznana domena';
+		}
+	}
 
 		isIconImage(img) {
 			const src = img.src.toLowerCase();
@@ -7386,18 +7488,23 @@ class AllegroOfferScanner {
 			const hasAllegroPay = this.hasAllegroPay;
 			const productParameters = this.productParameters;
 			const parametersCount = this.parametersCount;
-			const hasBrand = this.hasBrand;
-			const brandName = this.brandName;
-			const brandLink = this.brandLink;
-			const brandType = this.brandType;
+		const hasBrand = this.hasBrand;
+		const brandName = this.brandName;
+		const brandLink = this.brandLink;
+		const brandType = this.brandType;
+		const hasPackagingCondition = this.hasPackagingCondition;
+		const packagingConditionValue = this.packagingConditionValue;
+		const titleIssues = this.titleIssues;
+		const descriptionH1 = this.descriptionH1;
+		const descriptionH2 = this.descriptionH2;
 
-			// Monety i Kupony
-			const hasCoins = this.hasCoins;
-			const hasCoupons = this.hasCoupons;
+		// Monety i Kupony
+		const hasCoins = this.hasCoins;
+		const hasCoupons = this.hasCoupons;
 
-			// Generuj nazwę pliku
-			const fileName = this.generateFileName(offerName);
-			this.aiImageAnalysis = this.normalizeAiImageAnalysis(this.aiImageAnalysis);
+		// Generuj nazwę pliku
+		const fileName = this.generateFileName(offerName);
+		this.aiImageAnalysis = this.normalizeAiImageAnalysis(this.aiImageAnalysis);
 
 
 			const html = `<!DOCTYPE html>
@@ -7933,22 +8040,30 @@ class AllegroOfferScanner {
 								${hasBrand ? (brandType === 'producent' ? '✅ Ma producenta' : '✅ Ma markę') : '❌ Bez marki'}
 							</div>
 						</div>
-						${hasBrand && brandName ? `
-						<div class="row">
-							<div class="label">${brandType === 'producent' ? 'Producent:' : 'Marka:'}</div>
-							<div class="value">
-								${brandLink ?
-							`<a href="${brandLink}" target="_blank" style="color: #2563eb; text-decoration: underline;">${escapeHtml(brandName)}</a>` :
-							escapeHtml(brandName)
-						}
-							</div>
+					${hasBrand && brandName ? `
+					<div class="row">
+						<div class="label">${brandType === 'producent' ? 'Producent:' : 'Marka:'}</div>
+						<div class="value">
+							${brandLink ?
+						`<a href="${brandLink}" target="_blank" style="color: #2563eb; text-decoration: underline;">${escapeHtml(brandName)}</a>` :
+						escapeHtml(brandName)
+					}
 						</div>
-						` : ''}
 					</div>
-					
-					${parametersCount > 0 ? `
-					<div style="margin-top: 16px;">
-						<div style="font-weight: 600; color: #374151; margin-bottom: 12px; padding: 8px; background: #f8fafc; border-radius: 6px;">📋 Pełna lista parametrów</div>
+					` : ''}
+					<div class="row">
+						<div class="label">Stan opakowania:</div>
+						<div class="value analysis-result ${hasPackagingCondition ? 'match' : 'mismatch'}">
+							${hasPackagingCondition
+								? `✅ ${escapeHtml(packagingConditionValue)}`
+								: '⚠️ Brak – może obniżać pozycję w niektórych kategoriach'}
+						</div>
+					</div>
+				</div>
+				
+				${parametersCount > 0 ? `
+				<div style="margin-top: 16px;">
+					<div style="font-weight: 600; color: #374151; margin-bottom: 12px; padding: 8px; background: #f8fafc; border-radius: 6px;">📋 Pełna lista parametrów</div>
 						<div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
 							${productParameters.map((param, index) => `
 								<div style="margin-bottom: 12px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #ffffff;">
@@ -8131,8 +8246,45 @@ class AllegroOfferScanner {
 				</div>
 
 				<div class="section">
-					<div class="section-title">📝 Analiza opisu aukcji</div>
+					<div class="section-title">📝 Analiza tytułu oferty</div>
 					<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
+						<thead>
+							<tr style="background:#f9fafb;">
+								<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Kontrola</th>
+								<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:120px;">Status</th>
+								<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Szczegóły</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Zakazane frazy</td>
+								<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${titleIssues.filter(i => i.type === 'banned_phrase').length === 0 ? '#059669' : '#dc2626'};">
+									${titleIssues.filter(i => i.type === 'banned_phrase').length === 0 ? '✅ OK' : `❌ ${titleIssues.filter(i => i.type === 'banned_phrase').length} naruszeń`}
+								</td>
+								<td style="padding:12px; border:1px solid #e5e7eb; font-size:12px; color:#6b7280;">
+									${titleIssues.filter(i => i.type === 'banned_phrase').length > 0
+										? `Znaleziono: <strong style="color:#dc2626;">${titleIssues.filter(i => i.type === 'banned_phrase').map(i => escapeHtml(i.matched)).join(', ')}</strong>. Usuń te słowa – Google obniży pozycję oferty.`
+										: 'Brak niedozwolonych fraz reklamowych.'}
+								</td>
+							</tr>
+							<tr>
+								<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Znaki specjalne</td>
+								<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${titleIssues.filter(i => i.type === 'special_chars').length === 0 ? '#059669' : '#dc2626'};">
+									${titleIssues.filter(i => i.type === 'special_chars').length === 0 ? '✅ OK' : '❌ Wykryto'}
+								</td>
+								<td style="padding:12px; border:1px solid #e5e7eb; font-size:12px; color:#6b7280;">
+									${titleIssues.filter(i => i.type === 'special_chars').length > 0
+										? `Znaleziono: <strong style="color:#dc2626;">${titleIssues.filter(i => i.type === 'special_chars').map(i => escapeHtml(i.matched)).join(', ')}</strong>. Znaki specjalne jako ozdobniki są niezgodne z regulaminem Allegro.`
+										: 'Brak nieprawidłowych znaków specjalnych.'}
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+
+				<div class="section">
+				<div class="section-title">📝 Analiza opisu aukcji</div>
+				<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
 						<thead>
 							<tr style="background:#f9fafb;">
 								<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Parametr</th>
@@ -8169,15 +8321,38 @@ class AllegroOfferScanner {
 									${this.descriptionBoldPercent >= 5 && this.descriptionBoldPercent <= 10 ? ' ✅' : this.descriptionBoldPercent >= 3 && this.descriptionBoldPercent <= 15 ? ' ⚠️' : ' ❌'}
 								</td>
 							</tr>
-							<tr>
-								<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#f9fafb; color:#6b7280; font-size:12px;">
-									<strong>Rekomendacja:</strong> Optymalne: 5-10% pogrubionego tekstu. Wyróżnij najważniejsze informacje, ale nie przesadzaj.
-								</td>
-							</tr>
-						</tbody>
-					</table>
-					
-					${this.descriptionAiAnalysis ? `
+						<tr>
+							<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#f9fafb; color:#6b7280; font-size:12px;">
+								<strong>Rekomendacja:</strong> Optymalne: 5-10% pogrubionego tekstu. Wyróżnij najważniejsze informacje, ale nie przesadzaj.
+							</td>
+						</tr>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówek H1 w opisie</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.descriptionH1.exists ? '#059669' : '#dc2626'};">
+								${this.descriptionH1.exists
+									? `✅ Obecny${this.descriptionH1.text ? ': „' + escapeHtml(this.descriptionH1.text.substring(0, 60)) + (this.descriptionH1.text.length > 60 ? '…' : '') + '"' : ''}`
+									: '❌ Brak – dodaj H1 na początku opisu (powtórzenie tytułu)'}
+							</td>
+						</tr>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówki H2 w sekcjach</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${this.descriptionH2.total === 0 ? '#6b7280' : this.descriptionH2.percent >= 80 ? '#059669' : this.descriptionH2.percent >= 50 ? '#d97706' : '#dc2626'};">
+								${this.descriptionH2.total === 0
+									? '–'
+									: `${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (${this.descriptionH2.percent}%)`}
+							</td>
+						</tr>
+						${this.descriptionH2.total > 0 && this.descriptionH2.percent < 80 ? `
+						<tr>
+							<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#fef9c3; color:#713f12; font-size:12px;">
+								<strong>Rekomendacja:</strong> Dodaj nagłówki H2 do sekcji, które ich nie mają. Ułatwia to indeksowanie przez wyszukiwarki i poprawia czytelność opisu.
+							</td>
+						</tr>
+						` : ''}
+					</tbody>
+				</table>
+				
+				${this.descriptionAiAnalysis ? `
 					<div style="margin-top:24px; padding:16px; background:#f0f9ff; border-radius:8px; border:2px solid #3b82f6;">
 						<div style="font-weight:700; font-size:16px; color:#1e40af; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
 							🤖 Podsumowanie analizy opisu z AI
@@ -9359,17 +9534,56 @@ class AllegroOfferScanner {
 					`}
 				</div>
 
-				<div style="margin-bottom:24px;">
-					<div style="font-size:18px; font-weight:600; color:#374151; margin-bottom:12px; padding:8px; background:#f9fafb; border-left:4px solid #ff5a00;">
-						📝 Analiza opisu aukcji
-					</div>
-					<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
-						<thead>
-							<tr style="background:#f9fafb;">
-								<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Parametr</th>
-								<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:150px;">Wartość</th>
-							</tr>
-						</thead>
+			<div style="margin-bottom:24px;">
+				<div style="font-size:18px; font-weight:600; color:#374151; margin-bottom:12px; padding:8px; background:#f9fafb; border-left:4px solid #ff5a00;">
+					📝 Analiza tytułu oferty
+				</div>
+				<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
+					<thead>
+						<tr style="background:#f9fafb;">
+							<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Kontrola</th>
+							<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:120px;">Status</th>
+							<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Szczegóły</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Zakazane frazy</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${titleIssues.filter(i => i.type === 'banned_phrase').length === 0 ? '#059669' : '#dc2626'};">
+								${titleIssues.filter(i => i.type === 'banned_phrase').length === 0 ? '✅ OK' : `❌ ${titleIssues.filter(i => i.type === 'banned_phrase').length} naruszeń`}
+							</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-size:12px; color:#6b7280;">
+								${titleIssues.filter(i => i.type === 'banned_phrase').length > 0
+									? `Znaleziono: <strong style="color:#dc2626;">${titleIssues.filter(i => i.type === 'banned_phrase').map(i => this.escapeHtml(i.matched)).join(', ')}</strong>. Usuń – Google obniży pozycję.`
+									: 'Brak niedozwolonych fraz reklamowych.'}
+							</td>
+						</tr>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Znaki specjalne</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; text-align:center; font-weight:700; color:${titleIssues.filter(i => i.type === 'special_chars').length === 0 ? '#059669' : '#dc2626'};">
+								${titleIssues.filter(i => i.type === 'special_chars').length === 0 ? '✅ OK' : '❌ Wykryto'}
+							</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-size:12px; color:#6b7280;">
+								${titleIssues.filter(i => i.type === 'special_chars').length > 0
+									? `Znaleziono: <strong style="color:#dc2626;">${titleIssues.filter(i => i.type === 'special_chars').map(i => this.escapeHtml(i.matched)).join(', ')}</strong>. Niezgodne z regulaminem.`
+									: 'Brak nieprawidłowych znaków specjalnych.'}
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+
+			<div style="margin-bottom:24px;">
+				<div style="font-size:18px; font-weight:600; color:#374151; margin-bottom:12px; padding:8px; background:#f9fafb; border-left:4px solid #ff5a00;">
+					📝 Analiza opisu aukcji
+				</div>
+				<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
+					<thead>
+						<tr style="background:#f9fafb;">
+							<th style="padding:12px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Parametr</th>
+							<th style="padding:12px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:150px;">Wartość</th>
+						</tr>
+					</thead>
 						<tbody>
 							<tr>
 								<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Liczba znaków w opisie</td>
@@ -9400,29 +9614,45 @@ class AllegroOfferScanner {
 									${this.descriptionBoldPercent >= 5 && this.descriptionBoldPercent <= 10 ? ' ✅' : this.descriptionBoldPercent >= 3 && this.descriptionBoldPercent <= 15 ? ' ⚠️' : ' ❌'}
 								</td>
 							</tr>
-							<tr>
-								<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#f9fafb; color:#6b7280; font-size:12px;">
-									<strong>Rekomendacja:</strong> Optymalne: 5-10% pogrubionego tekstu. Wyróżnij najważniejsze informacje, ale nie przesadzaj.
-								</td>
-							</tr>
-						</tbody>
-					</table>
-					
-					${this.parametersInDescription.length > 0 ? `
-					<div style="margin-top:24px;">
-						<div style="font-weight:600; color:#374151; margin-bottom:12px; padding:8px; background:#f8fafc; border-radius:6px;">
-							📋 Parametry produktu w opisie (${this.parametersInDescriptionScore}% zgodności)
-						</div>
-						<div style="font-size:11px; color:#6b7280; margin-bottom:12px; padding:8px; background:#fef9c3; border-left:3px solid #ca8a04; border-radius:4px;">
-							ℹ️ <strong>Uwaga:</strong> Parametry "Stan" i "Faktura" są pomijane w analizie, ponieważ według regulaminu Allegro sprzedawcy nie mogą umieszczać ich w opisie produktu.
-						</div>
-						<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
-							<thead>
-								<tr style="background:#f9fafb;">
-									<th style="padding:10px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:20%;">Parametr</th>
-									<th style="padding:10px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:20%;">Wartość</th>
-									<th style="padding:10px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:80px;">W opisie</th>
-									<th style="padding:10px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Fragment w opisie</th>
+						<tr>
+							<td colspan="2" style="padding:12px; border:1px solid #e5e7eb; background:#f9fafb; color:#6b7280; font-size:12px;">
+								<strong>Rekomendacja:</strong> Optymalne: 5-10% pogrubionego tekstu. Wyróżnij najważniejsze informacje, ale nie przesadzaj.
+							</td>
+						</tr>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówek H1 w opisie</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:700; color:${this.descriptionH1.exists ? '#059669' : '#dc2626'};">
+								${this.descriptionH1.exists
+									? `✅ Obecny${this.descriptionH1.text ? ': „' + this.escapeHtml(this.descriptionH1.text.substring(0, 60)) + (this.descriptionH1.text.length > 60 ? '…' : '') + '"' : ''}`
+									: '❌ Brak – dodaj H1 na początku opisu'}
+							</td>
+						</tr>
+						<tr>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:500;">Nagłówki H2 w sekcjach</td>
+							<td style="padding:12px; border:1px solid #e5e7eb; font-weight:700; color:${this.descriptionH2.total === 0 ? '#6b7280' : this.descriptionH2.percent >= 80 ? '#059669' : this.descriptionH2.percent >= 50 ? '#d97706' : '#dc2626'};">
+								${this.descriptionH2.total === 0
+									? '–'
+									: `${this.descriptionH2.withH2}/${this.descriptionH2.total} sekcji (${this.descriptionH2.percent}%)`}
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				
+				${this.parametersInDescription.length > 0 ? `
+				<div style="margin-top:24px;">
+					<div style="font-weight:600; color:#374151; margin-bottom:12px; padding:8px; background:#f8fafc; border-radius:6px;">
+						📋 Parametry produktu w opisie (${this.parametersInDescriptionScore}% zgodności)
+					</div>
+					<div style="font-size:11px; color:#6b7280; margin-bottom:12px; padding:8px; background:#fef9c3; border-left:3px solid #ca8a04; border-radius:4px;">
+						ℹ️ <strong>Uwaga:</strong> Parametry "Stan" i "Faktura" są pomijane w analizie, ponieważ według regulaminu Allegro sprzedawcy nie mogą umieszczać ich w opisie produktu.
+					</div>
+					<table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb;">
+						<thead>
+							<tr style="background:#f9fafb;">
+								<th style="padding:10px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:20%;">Parametr</th>
+								<th style="padding:10px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:20%;">Wartość</th>
+								<th style="padding:10px; text-align:center; border:1px solid #e5e7eb; font-weight:600; color:#374151; width:80px;">W opisie</th>
+								<th style="padding:10px; text-align:left; border:1px solid #e5e7eb; font-weight:600; color:#374151;">Fragment w opisie</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -9562,22 +9792,30 @@ class AllegroOfferScanner {
 								${hasBrand ? (brandType === 'producent' ? '✅ Ma producenta' : '✅ Ma markę') : '❌ Bez marki'}
 							</div>
 						</div>
-						${hasBrand && brandName ? `
-						<div style="display:flex; justify-content:space-between; padding:8px 0;">
-							<div style="color:#6b7280;">${brandType === 'producent' ? 'Producent:' : 'Marka:'}</div>
-							<div style="font-weight:700;">
-								${brandLink ?
-							`<a href="${brandLink}" target="_blank" style="color: #2563eb; text-decoration: underline;">${this.escapeHtml(brandName)}</a>` :
-							this.escapeHtml(brandName)
-						}
-							</div>
+					${hasBrand && brandName ? `
+					<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed #e5e7eb;">
+						<div style="color:#6b7280;">${brandType === 'producent' ? 'Producent:' : 'Marka:'}</div>
+						<div style="font-weight:700;">
+							${brandLink ?
+						`<a href="${brandLink}" target="_blank" style="color: #2563eb; text-decoration: underline;">${this.escapeHtml(brandName)}</a>` :
+						this.escapeHtml(brandName)
+					}
 						</div>
-						` : ''}
 					</div>
-					
-					${parametersCount > 0 ? `
-					<div style="margin-top: 16px;">
-						<div style="font-weight: 600; color: #374151; margin-bottom: 12px; padding: 8px; background: #f8fafc; border-radius: 6px;">📋 Pełna lista parametrów</div>
+					` : ''}
+					<div style="display:flex; justify-content:space-between; padding:8px 0;">
+						<div style="color:#6b7280;">Stan opakowania:</div>
+						<div style="font-weight:700; color:${hasPackagingCondition ? '#059669' : '#d97706'};">
+							${hasPackagingCondition
+								? `✅ ${this.escapeHtml(packagingConditionValue)}`
+								: '⚠️ Brak – może obniżać pozycję'}
+						</div>
+					</div>
+				</div>
+				
+				${parametersCount > 0 ? `
+				<div style="margin-top: 16px;">
+					<div style="font-weight: 600; color: #374151; margin-bottom: 12px; padding: 8px; background: #f8fafc; border-radius: 6px;">📋 Pełna lista parametrów</div>
 						<div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
 							${productParameters.map((param, index) => `
 								<div style="margin-bottom: 12px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #ffffff;">
